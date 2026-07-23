@@ -108,7 +108,9 @@ export const CFG = {
   pools: {
     projectiles: 96,
     explosions: 24,
-    lights: 6,
+    // Always-on count (never toggled -- see fx/lights.js). Every one of these
+    // is paid for on every lit pixel every frame, so 4 rather than 6.
+    lights: 4,
   },
 
   fx: {

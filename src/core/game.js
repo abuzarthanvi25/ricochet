@@ -60,6 +60,7 @@ export class Game {
 
     this.attackers = new Set()
     this._ranked = []
+    this._addLight = (pos, color, intensity) => this.lights.add(pos, color, intensity)
     this.setDifficulty(loadDifficulty())
   }
 
@@ -196,7 +197,8 @@ export class Game {
     for (const p of this.projectiles.active) {
       this.lights.add(p.pos, p.color, CFG.fx.lightIntensity)
     }
-    this.explosions.collectLights((pos, color, intensity) => this.lights.add(pos, color, intensity))
+    // Bound once in the constructor -- this runs every frame.
+    this.explosions.collectLights(this._addLight)
     this.lights.commit(this.camera.position)
   }
 
