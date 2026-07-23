@@ -186,7 +186,12 @@ export class Game {
     if (!p.alive && !p.dying) {
       p.respawnTimer -= dt
       if (p.respawnTimer <= 0) {
-        p.spawnAt(this.arena.findSpawn(p.radius, this.enemies.filter((e) => e.alive).map((e) => e.pos)))
+        p.spawnAt(
+          this.arena.findSpawn(
+            p.radius,
+            this.enemies.filter((e) => e.alive).map((e) => e.pos)
+          )
+        )
         this.rig.snapNext = true
       }
     }
@@ -320,7 +325,12 @@ export class Game {
       if (selfKill) {
         // Killed by your own ricochet: the mechanic biting back. Costs a point.
         this.score.you = Math.max(0, this.score.you - 1)
-        this.hud.addKill({ killer: null, victim: 'YOU', victimTeam: 'player', verb: 'OWN RICOCHET' })
+        this.hud.addKill({
+          killer: null,
+          victim: 'YOU',
+          victimTeam: 'player',
+          verb: 'OWN RICOCHET',
+        })
       } else {
         this.score.them++
         this.hud.addKill({

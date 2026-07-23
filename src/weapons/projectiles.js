@@ -63,8 +63,14 @@ export class ProjectileSystem {
     const trailGeo = new THREE.BufferGeometry()
     this.trailPos = new Float32Array(N * SEGS * 2 * 3)
     this.trailCol = new Float32Array(N * SEGS * 2 * 3)
-    trailGeo.setAttribute('position', new THREE.BufferAttribute(this.trailPos, 3).setUsage(THREE.DynamicDrawUsage))
-    trailGeo.setAttribute('color', new THREE.BufferAttribute(this.trailCol, 3).setUsage(THREE.DynamicDrawUsage))
+    trailGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(this.trailPos, 3).setUsage(THREE.DynamicDrawUsage)
+    )
+    trailGeo.setAttribute(
+      'color',
+      new THREE.BufferAttribute(this.trailCol, 3).setUsage(THREE.DynamicDrawUsage)
+    )
     const trailMat = new THREE.LineBasicMaterial({
       vertexColors: true,
       transparent: true,

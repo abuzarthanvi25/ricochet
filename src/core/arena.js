@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { CFG, HALF } from '../config.js'
-import { rand, randomDirection, pick } from './util.js'
+import { rand, randomDirection } from './util.js'
 
 /** Grid decal painted onto the wall interiors, generated at runtime. */
 function makeGridTexture() {

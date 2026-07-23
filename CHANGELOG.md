@@ -32,8 +32,17 @@ Currently on the `perf/optimization` branch, not yet merged to `main`.
   - `shader programs` is on the panel deliberately: if it climbs during play,
     something is recompiling.
 
+- **ESLint 9 flat config and Prettier**, wired to match the existing style (no
+  semicolons, single quotes, 100 columns) so adopting them was a formatting pass
+  rather than a rewrite. `eslint-config-prettier` disables every stylistic rule
+  so the two never disagree. New scripts: `lint`, `lint:fix`, `format`,
+  `format:check`, and `check` (all three at once).
+
 ### Fixed
 
+- Dead code surfaced by the first lint run: an unused `pick` import, an unused
+  `WORLD_UP` constant, a dead `dist` assignment in `resolveSphere`, an unused
+  `orient(dt)` parameter, and four unused bindings in the test file.
 - **Mid-fight stutter** caused by shader recompilation, not by load. `LightPool`
   toggled `PointLight.visible` as projectiles came and went; three.js bakes the
   visible light count into its program cache key, so every material in the scene
@@ -52,8 +61,8 @@ Currently on the `perf/optimization` branch, not yet merged to `main`.
 
 ### Changed
 
-- **Projectiles render in two draw calls** instead of roughly two *per
-  projectile* — one `InstancedMesh` for the heads, one `LineSegments` holding
+- **Projectiles render in two draw calls** instead of roughly two _per
+  projectile_ — one `InstancedMesh` for the heads, one `LineSegments` holding
   every trail.
   - Note: three's `color_fragment` chunk only applies `vColor` under
     `USE_COLOR`, so `instanceColor` alone never reaches the fragment shader. The
@@ -71,14 +80,14 @@ Currently on the `perf/optimization` branch, not yet merged to `main`.
 
 Held load, update and render timed separately:
 
-| Metric | Before | After |
-| --- | --- | --- |
-| Worst frame on a light-count change | 177ms | 6.5ms |
-| 45 live projectiles, frame p50 | 12.5ms | 7.2ms (~139 fps) |
-| 90 live projectiles, frame p50 | — | 7.9ms (~127 fps) |
-| Draw calls @ 45 projectiles | 179 | 79 |
-| Draw calls @ 90 projectiles | — | 73 (flat) |
-| Shader recompiles per match | — | 0 |
+| Metric                              | Before | After            |
+| ----------------------------------- | ------ | ---------------- |
+| Worst frame on a light-count change | 177ms  | 6.5ms            |
+| 45 live projectiles, frame p50      | 12.5ms | 7.2ms (~139 fps) |
+| 90 live projectiles, frame p50      | —      | 7.9ms (~127 fps) |
+| Draw calls @ 45 projectiles         | 179    | 79               |
+| Draw calls @ 90 projectiles         | —      | 73 (flat)        |
+| Shader recompiles per match         | —      | 0                |
 
 Gameplay verified unchanged: full-match soaks land at 15–10 stationary and 15–2
 dodging on SOLDIER, with no projectile escapes, no NaN, and exact pool

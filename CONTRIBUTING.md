@@ -13,9 +13,26 @@ npm test         # must stay green
 
 Node 18+. Developed on 24.12.
 
+## Code style
+
+Formatting is Prettier's job, not yours — no semicolons, single quotes, 100
+columns. ESLint only enforces correctness rules; every stylistic rule is turned
+off by `eslint-config-prettier` so the two never disagree.
+
+```bash
+npm run lint         # eslint
+npm run lint:fix     # eslint --fix
+npm run format       # prettier --write
+npm run format:check # prettier --check
+npm run check        # lint + format:check + test, all three
+```
+
+Editor setup: point it at `.prettierrc.json` and enable format-on-save. There is
+no pre-commit hook — `npm run check` is the gate.
+
 ## Before you open a PR
 
-1. `npm test` passes.
+1. `npm run check` passes (lint, formatting, tests).
 2. `npm run build` succeeds.
 3. You actually played it. Load the page, fly around, fire into a wall, get
    killed by your own ricochet. Most regressions in this codebase are things a
@@ -31,7 +48,7 @@ These are load-bearing. Each one has already caused a real bug here.
 
 ### Never toggle `PointLight.visible`
 
-three.js bakes the number of *visible* lights into its shader program cache key.
+three.js bakes the number of _visible_ lights into its shader program cache key.
 Changing that count recompiles **every material in the scene**, on that frame.
 Measured cost here was **97–177ms** — a hard, visible freeze.
 
@@ -78,7 +95,7 @@ full strength; that rule never gets easier.
 ### Set the damage context before dealing damage
 
 A lethal hit runs `onBotKilled` synchronously, and the kill feed reads the
-bounce count from `game.damageContext`. Call `game.setDamageContext(p)` *before*
+bounce count from `game.damageContext`. Call `game.setDamageContext(p)` _before_
 `takeDamage`, or the feed reports a stale value.
 
 ---
@@ -104,7 +121,7 @@ non-cameras, which is the opposite — use `orientToDirection()` from
 pooled with O(1) free lists. Follow the pattern rather than constructing
 per-shot.
 
-**Comments explain *why*.** The code says what it does. Reserve comments for the
+**Comments explain _why_.** The code says what it does. Reserve comments for the
 non-obvious constraint — the three.js quirk, the reason a number is what it is,
 the bug that a line prevents.
 
@@ -135,6 +152,14 @@ stutter" is not reviewable; a before/after measurement is. The existing history
 follows this — `git log` is a reasonable reference.
 
 Update `CHANGELOG.md` under `[Unreleased]` for anything a player would notice.
+
+## Versioning & releases ([SemVer](https://semver.org/))
+
+`MAJOR.MINOR.PATCH` — breaking / feature / fix.
+
+1. `release/x.y.z` off `develop`; bump version, update `CHANGELOG.md`.
+2. Merge `release/x.y.z` → `main`; tag `vX.Y.Z`; push tags.
+3. Merge `release/x.y.z` back → `develop`.
 
 ---
 

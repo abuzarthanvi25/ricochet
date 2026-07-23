@@ -22,28 +22,28 @@ npm install
 npm run dev      # http://localhost:5173
 ```
 
-| Script | What it does |
-| --- | --- |
-| `npm run dev` | Vite dev server with HMR |
-| `npm run build` | Production bundle into `dist/` |
-| `npm run preview` | Serve the built bundle |
-| `npm test` | Headless checks for the collision and arming rules |
+| Script            | What it does                                       |
+| ----------------- | -------------------------------------------------- |
+| `npm run dev`     | Vite dev server with HMR                           |
+| `npm run build`   | Production bundle into `dist/`                     |
+| `npm run preview` | Serve the built bundle                             |
+| `npm test`        | Headless checks for the collision and arming rules |
 
 ---
 
 ## Controls
 
-| Input | Action |
-| --- | --- |
-| `W` `A` `S` `D` | Thrust, relative to where you're looking |
-| `Space` | Ascend (**world** up, always) |
-| `Shift` | Descend (**world** down, always) |
-| `Q` or right mouse | Boost dash — 1.2s cooldown |
-| Mouse | Aim |
-| Left mouse | Fire |
-| `Esc` | Release the pointer (pauses) |
-| `F3` | Debug overlay — with it on, `1`–`5` play each animation clip solo |
-| `F4` | Performance overlay (also via `?perf` in the URL) |
+| Input              | Action                                                            |
+| ------------------ | ----------------------------------------------------------------- |
+| `W` `A` `S` `D`    | Thrust, relative to where you're looking                          |
+| `Space`            | Ascend (**world** up, always)                                     |
+| `Shift`            | Descend (**world** down, always)                                  |
+| `Q` or right mouse | Boost dash — 1.2s cooldown                                        |
+| Mouse              | Aim                                                               |
+| Left mouse         | Fire                                                              |
+| `Esc`              | Release the pointer (pauses)                                      |
+| `F3`               | Debug overlay — with it on, `1`–`5` play each animation clip solo |
+| `F4`               | Performance overlay (also via `?perf` in the URL)                 |
 
 Ascend/descend stay locked to world axes on purpose. That single decision is
 what keeps 6-DOF flight readable instead of nauseating — "up" never rotates out
@@ -84,24 +84,24 @@ enemy damage only; your own ricochet always comes back at full strength.
 
 Deathmatch to **15** against **4** bots that respawn 3s after death.
 
-| Event | Score |
-| --- | --- |
-| You kill a bot | You +1 |
-| A bot kills you | Bots +1 |
-| Your own ricochet kills you | You −1 (floor 0) |
-| A bot kills another bot | No score — but it shows in the kill feed |
+| Event                       | Score                                    |
+| --------------------------- | ---------------------------------------- |
+| You kill a bot              | You +1                                   |
+| A bot kills you             | Bots +1                                  |
+| Your own ricochet kills you | You −1 (floor 0)                         |
+| A bot kills another bot     | No score — but it shows in the kill feed |
 
 ## Difficulty
 
 Selectable from the title screen **and** the pause menu, applied live without a
 restart, saved to `localStorage`. Default is **SOLDIER**.
 
-| | RECRUIT | SOLDIER | VETERAN |
-| --- | --- | --- | --- |
-| Bots firing at once | 2 | 3 | 4 |
-| Fire cooldown | 2.4s | 1.9s | 1.5s |
-| Aim cone | 11° | 8° | 5.5° |
-| Damage scale | 0.55 | 0.8 | 1.0 |
+|                     | RECRUIT | SOLDIER | VETERAN |
+| ------------------- | ------- | ------- | ------- |
+| Bots firing at once | 2       | 3       | 4       |
+| Fire cooldown       | 2.4s    | 1.9s    | 1.5s    |
+| Aim cone            | 11°     | 8°      | 5.5°    |
+| Damage scale        | 0.55    | 0.8     | 1.0     |
 
 The dominant lever is **how many bots may fire at once**, not their accuracy.
 Four bots focus-firing one target is what makes a fight unsurvivable; capping it
@@ -110,10 +110,10 @@ ones holding fire still fly and reposition.
 
 Measured across full matches with a scripted player:
 
-| Player behaviour | RECRUIT | SOLDIER | VETERAN |
-| --- | --- | --- | --- |
-| Never moves | won 15–5 | won 15–10 | **lost 5–15** |
-| Dodges | won 15–1 | won 15–2 | won 15–3 |
+| Player behaviour | RECRUIT  | SOLDIER   | VETERAN       |
+| ---------------- | -------- | --------- | ------------- |
+| Never moves      | won 15–5 | won 15–10 | **lost 5–15** |
+| Dodges           | won 15–1 | won 15–2  | won 15–3      |
 
 Movement is the whole game. A stationary player loses on VETERAN; the same
 player dodging wins on all three.
@@ -157,7 +157,7 @@ untouched holds frame zero for ten seconds and then plays 0.33s of motion.
 `retimeClip()` in `core/assets.js` shifts each clip back to its own start.
 
 **The model faces +Z**, while three.js treats −Z as forward, hence
-`CFG.bot.yawOffset = Math.PI`. The GLB origin also sits *below* the floating
+`CFG.bot.yawOffset = Math.PI`. The GLB origin also sits _below_ the floating
 body, so each instance is re-centred at load.
 
 **Collision is fully analytic** — exact per-axis solves against the arena box,
@@ -185,11 +185,11 @@ stutter in this scene.
 
 Current numbers under held load, update and render timed separately:
 
-| | |
-| --- | --- |
-| 45 live projectiles | 7.2ms/frame (~139 fps) |
-| 90 live projectiles | 7.9ms/frame (~127 fps) |
-| Draw calls | ~75, flat regardless of projectile count |
+|                     |                                          |
+| ------------------- | ---------------------------------------- |
+| 45 live projectiles | 7.2ms/frame (~139 fps)                   |
+| 90 live projectiles | 7.9ms/frame (~127 fps)                   |
+| Draw calls          | ~75, flat regardless of projectile count |
 
 All projectiles render in two draw calls — one `InstancedMesh` for the heads,
 one `LineSegments` for every trail.

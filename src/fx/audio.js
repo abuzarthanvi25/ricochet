@@ -48,7 +48,8 @@ function tone({ type = 'sine', from, to, attack = 0.005, decay = 0.15, peak = 0.
   osc.detune.value = detune
   const t = ctx.currentTime
   osc.frequency.setValueAtTime(from, t)
-  if (to !== undefined) osc.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + attack + decay)
+  if (to !== undefined)
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + attack + decay)
 
   const env = envGain(attack, decay, peak)
   osc.connect(env.node)
@@ -57,7 +58,14 @@ function tone({ type = 'sine', from, to, attack = 0.005, decay = 0.15, peak = 0.
 }
 
 let noiseBuffer = null
-function noise({ attack = 0.002, decay = 0.3, peak = 0.6, filterFrom = 4000, filterTo = 200, q = 1 }) {
+function noise({
+  attack = 0.002,
+  decay = 0.3,
+  peak = 0.6,
+  filterFrom = 4000,
+  filterTo = 200,
+  q = 1,
+}) {
   if (!ctx || !enabled) return
   if (!noiseBuffer) {
     const len = ctx.sampleRate * 1.0
@@ -126,7 +134,14 @@ export const sfx = {
     if (!takeVoice('bounce', 4)) return
     // Pitch climbs with each bounce -- the audible "this is armed" cue.
     const base = 520 * Math.pow(1.28, Math.min(bounces, 6))
-    tone({ type: 'triangle', from: base, to: base * 0.55, attack: 0.002, decay: 0.075, peak: 0.3 * g })
+    tone({
+      type: 'triangle',
+      from: base,
+      to: base * 0.55,
+      attack: 0.002,
+      decay: 0.075,
+      peak: 0.3 * g,
+    })
   },
 
   explode(dist = 0) {
@@ -164,13 +179,20 @@ export const sfx = {
 
   win() {
     ;[523, 659, 784, 1047].forEach((f, i) => {
-      setTimeout(() => tone({ type: 'square', from: f, to: f, attack: 0.01, decay: 0.3, peak: 0.25 }), i * 110)
+      setTimeout(
+        () => tone({ type: 'square', from: f, to: f, attack: 0.01, decay: 0.3, peak: 0.25 }),
+        i * 110
+      )
     })
   },
 
   lose() {
     ;[392, 330, 262, 196].forEach((f, i) => {
-      setTimeout(() => tone({ type: 'sawtooth', from: f, to: f * 0.9, attack: 0.02, decay: 0.4, peak: 0.28 }), i * 150)
+      setTimeout(
+        () =>
+          tone({ type: 'sawtooth', from: f, to: f * 0.9, attack: 0.02, decay: 0.4, peak: 0.28 }),
+        i * 150
+      )
     })
   },
 }

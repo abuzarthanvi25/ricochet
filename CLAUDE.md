@@ -15,9 +15,16 @@ sweeps.
 npm run dev       # Vite dev server, localhost:5173
 npm test          # headless rule checks — must stay green
 npm run build     # production bundle
+npm run check     # lint + format:check + test — run this before saying done
+npm run lint:fix  # eslint --fix
+npm run format    # prettier --write
 ```
 
 Node 18+ (developed on 24.12). `?perf` or `F4` in-game opens stats-gl + lil-gui.
+
+Formatting is Prettier's (no semicolons, single quotes, 100 cols); ESLint covers
+correctness only, with every stylistic rule disabled by `eslint-config-prettier`.
+Do not hand-format — run `npm run format`.
 
 ## Architecture
 
@@ -62,9 +69,11 @@ projectiles move 45 u/s and would tunnel, which breaks the whole premise.
 `npm test` fires 200 shots at 400 u/s to guard this.
 
 **The arming rule is universal:**
+
 ```js
 if (bot.id === p.ownerId && p.bounces === 0) continue
 ```
+
 Ignores only the owner, only before the first bounce. Identical for player and
 bots — that is why enemy ricochets kill other enemies. Do not special-case the
 player. Difficulty scales enemy damage only; your own ricochet is always full

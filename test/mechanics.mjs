@@ -2,13 +2,18 @@
 // clip retiming, and the arming rule that makes your own ricochet lethal.
 // Run with: npm test
 import * as THREE from 'three'
-import fs from 'node:fs'
 import { CFG, HALF } from '../src/config.js'
 
-let pass = 0, fail = 0
+let pass = 0,
+  fail = 0
 const ok = (name, cond, extra = '') => {
-  if (cond) { pass++; console.log(`  PASS  ${name}`) }
-  else { fail++; console.log(`  FAIL  ${name} ${extra}`) }
+  if (cond) {
+    pass++
+    console.log(`  PASS  ${name}`)
+  } else {
+    fail++
+    console.log(`  FAIL  ${name} ${extra}`)
+  }
 }
 const near = (a, b, eps = 1e-4) => Math.abs(a - b) < eps
 
@@ -16,7 +21,7 @@ console.log('\n== config ==')
 ok('arena half extents', HALF.x === 30 && HALF.y === 20 && HALF.z === 30)
 
 // ---------------------------------------------------------------- collision
-const { sweepArena, raySphere, clampToArena, resolveSphere, segmentClear } =
+const { sweepArena, raySphere, clampToArena, resolveSphere } =
   await import('../src/core/collision.js')
 
 console.log('\n== sweepArena ==')
@@ -37,7 +42,7 @@ console.log('\n== sweepArena ==')
   ok('no hit inside short sweep', t === -1, `got ${t}`)
 
   // corner-ish: nearest axis must win
-  t = sweepArena(new THREE.Vector3(0, 19, 0), new THREE.Vector3(0.1, 1, 0).normalize(), 1000, r, n)
+  sweepArena(new THREE.Vector3(0, 19, 0), new THREE.Vector3(0.1, 1, 0).normalize(), 1000, r, n)
   ok('nearest axis wins near ceiling', n.y === -1, n.toArray())
 
   // already outside -> immediate contact, still reflects inward
@@ -79,18 +84,31 @@ console.log('\n== bot vs arena ==')
 }
 
 // ------------------------------------------------------------------- util
-const { interceptTime, orientToDirection, jitterDirection } =
-  await import('../src/core/util.js')
+const { interceptTime, orientToDirection } = await import('../src/core/util.js')
 
 console.log('\n== intercept ==')
 {
   // target 45 units ahead moving +X at 10; projectile 45 u/s
-  const t = interceptTime(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -45), new THREE.Vector3(10, 0, 0), 45)
+  const t = interceptTime(
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0, -45),
+    new THREE.Vector3(10, 0, 0),
+    45
+  )
   ok('positive solution', t > 0, `got ${t}`)
   const aim = new THREE.Vector3(0, 0, -45).addScaledVector(new THREE.Vector3(10, 0, 0), t)
-  ok('lead point reachable in t', near(aim.length() / 45, t, 1e-3), `dist/speed=${aim.length() / 45} t=${t}`)
+  ok(
+    'lead point reachable in t',
+    near(aim.length() / 45, t, 1e-3),
+    `dist/speed=${aim.length() / 45} t=${t}`
+  )
 
-  const stat = interceptTime(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -45), new THREE.Vector3(0, 0, 0), 45)
+  const stat = interceptTime(
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0, -45),
+    new THREE.Vector3(0, 0, 0),
+    45
+  )
   ok('stationary target -> t = d/s', near(stat, 1), `got ${stat}`)
 }
 
@@ -113,8 +131,11 @@ console.log('\n== clip retiming (real GLB track times) ==')
 {
   // Rebuild the exact shared-timeline situation the GLB ships with.
   const ranges = {
-    Idle: [0.033, 9.992], Shoot: [10.033, 10.367], Move: [10.45, 11.617],
-    Hurt: [11.7, 12.658], Death: [12.7, 14.0],
+    Idle: [0.033, 9.992],
+    Shoot: [10.033, 10.367],
+    Move: [10.45, 11.617],
+    Hurt: [11.7, 12.658],
+    Death: [12.7, 14.0],
   }
   const expected = { Idle: 9.959, Shoot: 0.334, Move: 1.167, Hurt: 0.958, Death: 1.3 }
 
@@ -137,9 +158,11 @@ console.log('\n== clip retiming (real GLB track times) ==')
     const clip = new THREE.AnimationClip(name, -1, [track])
     const before = clip.duration
     retimeClip(clip)
-    ok(`${name}: ${before.toFixed(3)}s -> ${clip.duration.toFixed(3)}s`,
-       near(clip.duration, expected[name], 2e-3) && near(clip.tracks[0].times[0], 0),
-       `expected ${expected[name]}`)
+    ok(
+      `${name}: ${before.toFixed(3)}s -> ${clip.duration.toFixed(3)}s`,
+      near(clip.duration, expected[name], 2e-3) && near(clip.tracks[0].times[0], 0),
+      `expected ${expected[name]}`
+    )
   }
 }
 
@@ -155,55 +178,97 @@ console.log('\n== projectile stepping / arming ==')
   const damage = []
 
   const owner = {
-    id: 1, alive: true, radius: CFG.bot.radius,
+    id: 1,
+    alive: true,
+    radius: CFG.bot.radius,
     pos: new THREE.Vector3(0, 0, 0),
-    takeDamage(amt, by) { damage.push({ who: 'owner', amt, by }) },
+    takeDamage(amt, by) {
+      damage.push({ who: 'owner', amt, by })
+    },
   }
   const target = {
-    id: 2, alive: true, radius: CFG.bot.radius,
+    id: 2,
+    alive: true,
+    radius: CFG.bot.radius,
     pos: new THREE.Vector3(0, 0, -20),
-    takeDamage(amt, by) { damage.push({ who: 'target', amt, by }) },
+    takeDamage(amt, by) {
+      damage.push({ who: 'target', amt, by })
+    },
   }
 
   const game = {
     arena: { debris: [] },
     bots: [owner, target],
     damageContext: { bounces: 0, ownerId: -1 },
-    setDamageContext(p) { this.damageContext.bounces = p.bounces; this.damageContext.ownerId = p.ownerId },
-    detonate(p, hit) { detonations.push({ pos: p.pos.clone(), bounces: p.bounces, hit: hit ? hit.id : null }) },
-    onProjectileBounce(p) { bounceLog.push(p.bounces) },
+    setDamageContext(p) {
+      this.damageContext.bounces = p.bounces
+      this.damageContext.ownerId = p.ownerId
+    },
+    detonate(p, hit) {
+      detonations.push({ pos: p.pos.clone(), bounces: p.bounces, hit: hit ? hit.id : null })
+    },
+    onProjectileBounce(p) {
+      bounceLog.push(p.bounces)
+    },
   }
 
   // --- 1. direct hit on an enemy, no bounce
   sys.spawn(1, 'player', new THREE.Vector3(0, 0, -2), new THREE.Vector3(0, 0, -1))
   for (let i = 0; i < 60 && sys.active.length; i++) sys.update(1 / 60, game)
-  ok('direct shot hits the enemy', damage.some((d) => d.who === 'target'), JSON.stringify(damage))
+  ok(
+    'direct shot hits the enemy',
+    damage.some((d) => d.who === 'target'),
+    JSON.stringify(damage)
+  )
   ok('direct hit had 0 bounces', detonations[0] && detonations[0].bounces === 0)
 
   // --- 2. owner is immune before the first bounce
-  damage.length = 0; detonations.length = 0; sys.clear()
-  const p2 = sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1))
+  damage.length = 0
+  detonations.length = 0
+  sys.clear()
+  sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1))
   sys.update(1 / 600, game) // tiny step: still overlapping the owner sphere
   ok('owner not hit pre-bounce', !damage.some((d) => d.who === 'owner'), JSON.stringify(damage))
 
   // --- 3. THE mechanic: fire at a wall point-blank, get killed by the return
-  damage.length = 0; detonations.length = 0; bounceLog.length = 0; sys.clear()
+  damage.length = 0
+  detonations.length = 0
+  bounceLog.length = 0
+  sys.clear()
   owner.pos.set(0, 0, HALF.z - 6)
   target.pos.set(0, 0, -200) // far out of the way
   sys.spawn(1, 'player', new THREE.Vector3(0, 0, HALF.z - 5), new THREE.Vector3(0, 0, 1))
   let frames = 0
   while (sys.active.length && frames++ < 300) sys.update(1 / 60, game)
   ok('projectile bounced off the wall', bounceLog.length >= 1, `bounces ${bounceLog}`)
-  ok('own ricochet damaged the shooter', damage.some((d) => d.who === 'owner' && d.by === 1), JSON.stringify(damage))
+  ok(
+    'own ricochet damaged the shooter',
+    damage.some((d) => d.who === 'owner' && d.by === 1),
+    JSON.stringify(damage)
+  )
 
   // --- 4. lifetime detonation, and it must expire on time
-  damage.length = 0; detonations.length = 0; sys.clear()
-  owner.pos.set(0, 0, 200); target.pos.set(0, 0, -200)
+  damage.length = 0
+  detonations.length = 0
+  sys.clear()
+  owner.pos.set(0, 0, 200)
+  target.pos.set(0, 0, -200)
   sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 0.3, 0.2).normalize())
   let t = 0
-  while (sys.active.length && t < 10) { sys.update(1 / 60, game); t += 1 / 60 }
-  ok('detonated at lifetime', Math.abs(t - CFG.proj.lifetime) < 0.05, `t=${t.toFixed(3)} want ${CFG.proj.lifetime}`)
-  ok('bounced several times first', detonations[0] && detonations[0].bounces >= 2, `bounces ${detonations[0]?.bounces}`)
+  while (sys.active.length && t < 10) {
+    sys.update(1 / 60, game)
+    t += 1 / 60
+  }
+  ok(
+    'detonated at lifetime',
+    Math.abs(t - CFG.proj.lifetime) < 0.05,
+    `t=${t.toFixed(3)} want ${CFG.proj.lifetime}`
+  )
+  ok(
+    'bounced several times first',
+    detonations[0] && detonations[0].bounces >= 2,
+    `bounces ${detonations[0]?.bounces}`
+  )
 
   // --- 5. no tunnelling at absurd speed
   const realSpeed = CFG.proj.speed
@@ -211,11 +276,19 @@ console.log('\n== projectile stepping / arming ==')
   let escaped = 0
   for (let trial = 0; trial < 200; trial++) {
     sys.clear()
-    const d = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize()
+    const d = new THREE.Vector3(
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1
+    ).normalize()
     const p = sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), d)
     for (let i = 0; i < 180 && sys.active.length; i++) {
       sys.update(1 / 60, game)
-      if (Math.abs(p.pos.x) > HALF.x + 0.5 || Math.abs(p.pos.y) > HALF.y + 0.5 || Math.abs(p.pos.z) > HALF.z + 0.5) {
+      if (
+        Math.abs(p.pos.x) > HALF.x + 0.5 ||
+        Math.abs(p.pos.y) > HALF.y + 0.5 ||
+        Math.abs(p.pos.z) > HALF.z + 0.5
+      ) {
         escaped++
         break
       }
@@ -225,9 +298,13 @@ console.log('\n== projectile stepping / arming ==')
   ok('200 shots at 400 u/s, none escaped the box', escaped === 0, `${escaped} escaped`)
 
   // --- 6. debris reflect too
-  damage.length = 0; detonations.length = 0; bounceLog.length = 0; sys.clear()
+  damage.length = 0
+  detonations.length = 0
+  bounceLog.length = 0
+  sys.clear()
   game.arena.debris = [{ pos: new THREE.Vector3(0, 0, -10), radius: 4 }]
-  owner.pos.set(0, 0, 200); target.pos.set(0, 0, -300)
+  owner.pos.set(0, 0, 200)
+  target.pos.set(0, 0, -300)
   const p6 = sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1))
   for (let i = 0; i < 12 && sys.active.length; i++) sys.update(1 / 60, game)
   ok('debris reflects the shot', bounceLog.length >= 1 && p6.vel.z > 0, `vel.z=${p6.vel.z}`)

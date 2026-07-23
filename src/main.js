@@ -8,7 +8,13 @@ import './style.css'
 import { CFG } from './config.js'
 import { loadAssets, CLIP } from './core/assets.js'
 import {
-  initInput, consumeMouse, onLockChange, onLockError, requestLock, releaseLock, isLocked,
+  initInput,
+  consumeMouse,
+  onLockChange,
+  onLockError,
+  requestLock,
+  releaseLock,
+  isLocked,
 } from './core/input.js'
 import { Game, STATE } from './core/game.js'
 import { Hud } from './ui/hud.js'
@@ -238,11 +244,18 @@ window.addEventListener('keydown', async (e) => {
   // the check that the shared-timeline retiming actually took -- every clip
   // must start moving immediately, with no dead pause at the front.
   if (debugOn && game && game.player.alive) {
-    const map = { Digit1: CLIP.IDLE, Digit2: CLIP.SHOOT, Digit3: CLIP.MOVE, Digit4: CLIP.HURT, Digit5: CLIP.DEATH }
+    const map = {
+      Digit1: CLIP.IDLE,
+      Digit2: CLIP.SHOOT,
+      Digit3: CLIP.MOVE,
+      Digit4: CLIP.HURT,
+      Digit5: CLIP.DEATH,
+    }
     const clip = map[e.code]
     if (clip) {
       game.player.override = null
       game.player.playOverride(clip)
+      // eslint-disable-next-line no-console -- clip inspector output is the point
       console.log(`[clip] ${clip} -> ${game.player.actions[clip].getClip().duration.toFixed(3)}s`)
     }
   }
@@ -256,7 +269,7 @@ function frame(now) {
   last = now
   // Clamp so an alt-tab cannot hand us a one-second step.
   dt = Math.min(dt, 1 / 30)
-  fps += ((1 / Math.max(dt, 1e-4)) - fps) * 0.08
+  fps += (1 / Math.max(dt, 1e-4) - fps) * 0.08
 
   renderer.info.reset()
 
