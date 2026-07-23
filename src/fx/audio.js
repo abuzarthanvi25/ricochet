@@ -203,6 +203,12 @@ export const sfx = {
     tone({ type: 'square', from: 880, to: 300, attack: 0.006, decay: 0.28, peak: 0.18 })
   },
 
+  /** Frostile landed on you. Descending and brittle -- the opposite of powerUp. */
+  freeze() {
+    tone({ type: 'triangle', from: 1800, to: 420, attack: 0.004, decay: 0.45, peak: 0.24 })
+    noise({ attack: 0.002, decay: 0.3, peak: 0.16, filterFrom: 7000, filterTo: 2200, q: 4 })
+  },
+
   warn() {
     tone({ type: 'triangle', from: 1200, to: 1200, attack: 0.01, decay: 0.09, peak: 0.16 })
   },

@@ -25,17 +25,36 @@ Merged to `develop`, not yet released to `main`.
     reflector: an off-centre hit scatters, so the shield reliably saves you but
     only sometimes kills the shooter. You can still fire out through your own
     bubble — the arming rule gates the shield exactly as it gates damage.
-  - **PERMABOOST** — dash with no cooldown. Still edge-triggered, so holding `Q`
-    does not chain-dash. Bots get the equivalent: their evade has no cooldown, so
-    they break away from every incoming shot instead of one every ~0.9s.
+  - **PERMABOOST** — a whole-loadout buff, not just a cooldown removal: **1.45×**
+    thrust and top speed, **1.35×** projectile speed, **1.5×** dash impulse, and
+    no dash cooldown. Holds an 82° FOV for its duration so the speed reads on
+    screen. Still edge-triggered, so holding `Q` does not chain-dash. Bots get
+    the equivalent: their evade has no cooldown, so they break away from every
+    incoming shot instead of one every ~0.9s.
+    - Projectile speed became per-shot rather than a global constant. The enemy
+      lead-aim solver reads the firing bot's own muzzle velocity, or a
+      permaboosted bot would consistently over-lead its target.
   - **FROSTILES** — direct hits drop the target to 0.4× thrust and speed for
     2.5s and tint it frost-blue. Your own returning ricochet freezes you too.
+    - Taking one puts a blue rime around the screen edge that thaws as you
+      recover, a `SYSTEMS FROZEN` readout above the crosshair, a brittle
+      descending cue and a short camera shake. Blue and edge-weighted on purpose
+      — the red damage vignette owns the same screen area and the two must never
+      be mistaken for one another.
+    - The slow is a separate multiplier from permaboost's, so the two stack:
+      frozen while permaboosted leaves you at 1.45 × 0.4 = 0.58×, slow but not
+      helpless. Neither effect can cancel the other by landing last.
   - **ROCKETILES** — magenta cones that fly straight for 0.35s, then hunt the
     nearest entity within 22 units at 3.2 rad/s. Target selection runs the same
     arming predicate as damage, so a bounced rocketile will come around and hunt
     the player who fired it.
   - Bots break off to contest a pickup within 22 units (`AI.COLLECT`), and their
     nameplate shows what they are holding. A bot's powerup is lost on death.
+- **Powerup debug mode (`F2`)** — grants any powerup on `1`–`4`, clears on `0`,
+  so a powerup can be tested without waiting for one of the four a match gets.
+  Grants bypass the match budget entirely and re-pressing a key refreshes the
+  timer. It claims the digit keys while active, so the `F3` clip inspector is
+  unavailable until it is switched back off — which also drops what you held.
 - **Difficulty presets** — RECRUIT / SOLDIER / VETERAN, selectable from both the
   title screen and the pause menu. Applied live without restarting a match and
   persisted to `localStorage`. Default is SOLDIER.

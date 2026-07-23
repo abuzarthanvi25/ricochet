@@ -241,6 +241,18 @@ const mouse = { x: 0, y: 0 }
 let last = performance.now()
 let fps = 60
 let debugOn = CFG.debug
+let powerupDebug = false
+
+// Powerup debug (F2). Grants come straight from Game.grantPowerup, so they do
+// not consume the match budget -- you can sit on one powerup for as long as it
+// takes to test it. Digits are shared with the clip inspector below, so this
+// claims them first and returns.
+const POWERUP_KEYS = {
+  Digit1: 'shield',
+  Digit2: 'permaboost',
+  Digit3: 'frostiles',
+  Digit4: 'rocketiles',
+}
 
 window.addEventListener('keydown', async (e) => {
   if (e.code === 'F3') {
@@ -252,6 +264,26 @@ window.addEventListener('keydown', async (e) => {
     e.preventDefault()
     await enablePerf()
   }
+  if (e.code === 'F2' && game) {
+    e.preventDefault()
+    powerupDebug = !powerupDebug
+    hud.setPowerupDebug(powerupDebug)
+    if (!powerupDebug) game.player.clearPowerup()
+    return
+  }
+
+  if (powerupDebug && game) {
+    if (e.code === 'Digit0') {
+      game.player.clearPowerup()
+      return
+    }
+    const id = POWERUP_KEYS[e.code]
+    if (id) {
+      game.grantPowerup(id)
+      return
+    }
+  }
+
   // Clip inspector: with debug on, 1-5 force-play each animation solo. This is
   // the check that the shared-timeline retiming actually took -- every clip
   // must start moving immediately, with no dead pause at the front.

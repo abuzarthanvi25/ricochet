@@ -53,7 +53,8 @@ export class Bot {
     // the sweep, and keeping it a field lets the headless tests use plain
     // object mocks with no extra stubbing.
     this.shieldRadius = 0
-    this.speedMul = 1
+    this.speedMul = 1 // frostile slow
+    this.powerMul = 1 // permaboost
     this.slowTimer = 0
     this._tint = null
 
@@ -147,6 +148,11 @@ export class Bot {
     const shielded = this.powerup === 'shield'
     this.shieldRadius = shielded ? CFG.powerups.shield.radius : 0
     if (this.shield) this.shield.visible = shielded
+
+    // Kept separate from `speedMul` (the frostile slow) so the two multiply.
+    // Being frozen while permaboosted should leave you slow-but-less-slow, not
+    // hand whichever effect landed last the final say.
+    this.powerMul = this.powerup === 'permaboost' ? CFG.powerups.permaboost.speedMul : 1
   }
 
   _updatePowerup(dt) {
@@ -170,8 +176,12 @@ export class Bot {
 
   /** Frostile hit. Strongest slow and longest timer win, so stacking cannot shorten one. */
   applySlow(duration, mul) {
+    const wasFree = this.slowTimer <= 0
     this.slowTimer = Math.max(this.slowTimer, duration)
     this.speedMul = Math.min(this.speedMul, mul)
+    // Only on the transition -- a second frostile mid-freeze must not re-fire
+    // the cue, or a sustained freeze turns into a stutter of overlapping sounds.
+    if (wasFree) this.onSlowed?.()
   }
 
   _updateSlow(dt) {
@@ -190,6 +200,18 @@ export class Bot {
 
   projMod() {
     return this.powerup === 'frostiles' ? 'frost' : null
+  }
+
+  /**
+   * Muzzle velocity for this bot right now. Speed is per-projectile rather than
+   * a global constant because permaboost makes your shots faster; the enemy
+   * lead-aim solver reads this too, or a permaboosted bot would consistently
+   * lead too far.
+   */
+  projSpeed() {
+    return this.powerup === 'permaboost'
+      ? CFG.proj.speed * CFG.powerups.permaboost.projSpeedMul
+      : CFG.proj.speed
   }
 
   // ------------------------------------------------------------------ spawn
@@ -279,13 +301,13 @@ export class Bot {
       // Frostile slow scales thrust and the cap, never maxSpeed/accel
       // themselves -- Enemy.applyDifficulty() rewrites those, so a slow stored
       // there would silently vanish on a mid-match difficulty change.
-      this.vel.addScaledVector(this.wish, this.accel * this.speedMul * dt)
+      this.vel.addScaledVector(this.wish, this.accel * this.speedMul * this.powerMul * dt)
     }
 
     // Frame-rate independent drag. Never `vel *= 0.92` per frame.
     this.vel.multiplyScalar(Math.pow(this.drag, dt))
 
-    const cap = this.maxSpeed * this.speedMul * (this.overspeed > 0 ? 2.2 : 1)
+    const cap = this.maxSpeed * this.speedMul * this.powerMul * (this.overspeed > 0 ? 2.2 : 1)
     const sp = this.vel.length()
     if (sp > cap) this.vel.multiplyScalar(cap / sp)
 

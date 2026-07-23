@@ -84,6 +84,9 @@ export class ProjectileSystem {
         damageScale: 1,
         kind: 'blast', // 'blast' | 'rocket'
         mod: null, // 'frost' | null
+        // Per-projectile rather than a global constant: permaboost makes shots
+        // fly faster, so speed has to travel with the shot.
+        speed: CFG.proj.speed,
         pos: new THREE.Vector3(),
         vel: new THREE.Vector3(),
         age: 0,
@@ -140,7 +143,16 @@ export class ProjectileSystem {
     return p.kind === 'rocket' ? this.rockets : this.heads
   }
 
-  spawn(ownerId, ownerTeam, origin, dir, damageScale = 1, kind = 'blast', mod = null) {
+  spawn(
+    ownerId,
+    ownerTeam,
+    origin,
+    dir,
+    damageScale = 1,
+    kind = 'blast',
+    mod = null,
+    speed = CFG.proj.speed
+  ) {
     // O(1) free list; the old `pool.find(x => !x.alive)` was a linear scan on
     // every single shot.
     const idx = this.free.pop()
@@ -153,8 +165,9 @@ export class ProjectileSystem {
     p.damageScale = damageScale
     p.kind = kind
     p.mod = mod
+    p.speed = speed
     p.pos.copy(origin)
-    p.vel.copy(dir).normalize().multiplyScalar(CFG.proj.speed)
+    p.vel.copy(dir).normalize().multiplyScalar(speed)
     p.age = 0
     p.bounces = 0
     p.trailCount = 0
@@ -327,7 +340,7 @@ export class ProjectileSystem {
     _axis.normalize()
 
     _dir.applyAxisAngle(_axis, Math.min(angle, R.turnRate * dt)).normalize()
-    p.vel.copy(_dir).multiplyScalar(CFG.proj.speed)
+    p.vel.copy(_dir).multiplyScalar(p.speed)
   }
 
   /**
@@ -345,7 +358,7 @@ export class ProjectileSystem {
     // Steer first, sweep second. See _home().
     if (p.kind === 'rocket' && p.age >= CFG.powerups.rocket.armDelay) this._home(p, dt, game)
 
-    let remaining = CFG.proj.speed * dt
+    let remaining = p.speed * dt
     let bouncesThisFrame = 0
     _dir.copy(p.vel).normalize()
 

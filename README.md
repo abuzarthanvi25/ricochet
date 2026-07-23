@@ -42,8 +42,15 @@ npm run dev      # http://localhost:5173
 | Mouse              | Aim                                                               |
 | Left mouse         | Fire                                                              |
 | `Esc`              | Release the pointer (pauses)                                      |
+| `F2`               | Powerup debug — with it on, `1`–`4` grant any powerup, `0` clears |
 | `F3`               | Debug overlay — with it on, `1`–`5` play each animation clip solo |
 | `F4`               | Performance overlay (also via `?perf` in the URL)                 |
+
+`F2` exists to test a powerup without waiting for one of the four a match gets.
+Grants do not consume the match budget and re-pressing a key refreshes the timer,
+so you can sit on one for as long as you need. It claims the digit keys while
+active, so the `F3` clip inspector is unavailable until you switch it back off —
+which also drops whatever you were holding.
 
 Ascend/descend stay locked to world axes on purpose. That single decision is
 what keeps 6-DOF flight readable instead of nauseating — "up" never rotates out
@@ -102,9 +109,28 @@ through pickups and leave them for somebody else. Everything expires on the same
 | Powerup        | Effect                                                    | What the ricochet rule does to it                                                     |
 | -------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | **SHIELD**     | 2.4-unit bubble; shots reflect off you instead of hitting | A reflection is a bounce — the shot comes off **armed against the bot that fired it** |
-| **PERMABOOST** | Dash with no cooldown                                     | Bots get the same deal: their evade stops having a cooldown                           |
+| **PERMABOOST** | Everything speeds up — see below                          | Bots get the same deal: their evade stops having a cooldown                           |
 | **FROSTILES**  | Direct hits drop the target to 0.4× speed for 2.5s        | Your own returning ricochet freezes **you**                                           |
 | **ROCKETILES** | Magenta cones that hunt the nearest bot within 22 units   | Once bounced, the nearest bot might be you                                            |
+
+**Permaboost is a whole-loadout buff**, not just a cooldown removal:
+
+|                      | Multiplier |
+| -------------------- | ---------- |
+| Thrust and top speed | **1.45×**  |
+| Projectile speed     | **1.35×**  |
+| Dash impulse         | **1.5×**   |
+| Dash cooldown        | removed    |
+
+It also holds the camera at 82° FOV for its duration, so the speed reads on
+screen rather than only in the numbers. Faster shots mean less lead to give and
+less time for a bot to dodge — but they also come back off the wall sooner.
+
+The **frostile** slow is a separate multiplier from permaboost's, so the two
+stack: frozen while permaboosted leaves you at 1.45 × 0.4 = **0.58×**, slow but
+not helpless. Taking a frostile puts a blue rime around the screen edge and a
+`SYSTEMS FROZEN` readout above the crosshair — deliberately blue and
+edge-weighted so it is never confused with the red damage vignette.
 
 The shield is a convex mirror, not a retro-reflector — an off-centre hit
 scatters. It saves you reliably; it kills the shooter only when they hit you

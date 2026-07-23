@@ -619,6 +619,115 @@ console.log('\n== slow effect ==')
   ok('and restores full speed', bot.speedMul === 1)
 }
 
+console.log('\n== permaboost ==')
+{
+  const { ProjectileSystem } = await import('../src/weapons/projectiles.js')
+  const sys = new ProjectileSystem({ add() {} })
+  const PB = CFG.powerups.permaboost
+
+  ok('speeds up movement', PB.speedMul > 1, `${PB.speedMul}`)
+  ok('speeds up shots', PB.projSpeedMul > 1, `${PB.projSpeedMul}`)
+  ok('strengthens the dash', PB.boostMul > 1, `${PB.boostMul}`)
+
+  // Projectile speed is per-shot, not a global constant.
+  const game = {
+    arena: { debris: [] },
+    bots: [],
+    setDamageContext() {},
+    detonate() {},
+    onProjectileBounce() {},
+  }
+  const fast = CFG.proj.speed * PB.projSpeedMul
+  const a = sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1))
+  const b = sys.spawn(
+    2,
+    'enemy',
+    new THREE.Vector3(0, 5, 0),
+    new THREE.Vector3(0, 0, -1),
+    1,
+    'blast',
+    null,
+    fast
+  )
+  ok(
+    'default speed is the nominal one',
+    near(a.vel.length(), CFG.proj.speed, 1e-3),
+    `${a.vel.length()}`
+  )
+  ok('permaboosted shot leaves faster', near(b.vel.length(), fast, 1e-3), `${b.vel.length()}`)
+
+  const az0 = a.pos.z
+  const bz0 = b.pos.z
+  for (let i = 0; i < 10; i++) sys.update(1 / 60, game)
+  const aTravel = az0 - a.pos.z
+  const bTravel = bz0 - b.pos.z
+  ok(
+    'and covers proportionally more ground',
+    near(bTravel / aTravel, PB.projSpeedMul, 1e-3),
+    `ratio ${(bTravel / aTravel).toFixed(4)} want ${PB.projSpeedMul}`
+  )
+  sys.clear()
+
+  // Two shots at different speeds must not tunnel either.
+  const realSpeed = CFG.proj.speed
+  CFG.proj.speed = 300
+  let escaped = 0
+  for (let trial = 0; trial < 100; trial++) {
+    sys.clear()
+    const d = new THREE.Vector3(
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1
+    ).normalize()
+    const p = sys.spawn(
+      1,
+      'player',
+      new THREE.Vector3(0, 0, 0),
+      d,
+      1,
+      'blast',
+      null,
+      300 * PB.projSpeedMul
+    )
+    for (let i = 0; i < 180 && sys.active.length; i++) {
+      sys.update(1 / 60, game)
+      if (
+        Math.abs(p.pos.x) > HALF.x + 0.5 ||
+        Math.abs(p.pos.y) > HALF.y + 0.5 ||
+        Math.abs(p.pos.z) > HALF.z + 0.5
+      ) {
+        escaped++
+        break
+      }
+    }
+  }
+  CFG.proj.speed = realSpeed
+  ok('100 permaboosted shots at 405 u/s, none escaped', escaped === 0, `${escaped} escaped`)
+}
+
+console.log('\n== permaboost x frostile stacking ==')
+{
+  // The two multipliers are separate fields on purpose: being frozen while
+  // permaboosted must leave you slow-but-less-slow, not hand whichever landed
+  // last the final say.
+  const PB = CFG.powerups.permaboost
+  const F = CFG.powerups.frost
+  const bot = { speedMul: 1, powerMul: 1 }
+  const effective = () => bot.speedMul * bot.powerMul
+
+  bot.powerMul = PB.speedMul
+  ok('permaboost alone speeds you up', near(effective(), PB.speedMul))
+  bot.speedMul = F.speedMul
+  ok(
+    'frozen while permaboosted multiplies both',
+    near(effective(), PB.speedMul * F.speedMul),
+    `${effective()}`
+  )
+  ok('and that is still slower than baseline', effective() < 1, `${effective()}`)
+  bot.powerMul = 1
+  ok('losing permaboost leaves the slow intact', near(effective(), F.speedMul))
+}
+
 console.log('\n== powerup budget ==')
 {
   const { POWERUP_IDS } = await import('../src/core/powerups.js')

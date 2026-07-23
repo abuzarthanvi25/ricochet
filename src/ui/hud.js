@@ -24,15 +24,19 @@ export class Hud {
     this.warn = $('warn-inbound')
     this.debugEl = $('debug')
 
+    this.frost = $('frost')
+    this.frostLabel = $('frost-label')
     this.powerupEl = $('powerup')
     this.powerupRing = $('powerup-ring')
     this.powerupGlyph = $('powerup-glyph')
     this.powerupLabel = $('powerup-label')
     this.toastEl = $('powerup-toast')
+    this.powerupDebugEl = $('powerup-debug')
 
     this.ring.style.strokeDasharray = RING_CIRCUMFERENCE
     this.powerupRing.style.strokeDasharray = PU_CIRCUMFERENCE
     this._puId = null
+    this._frozen = false
     this._vignetteLevel = 0
     this._hitTimer = null
   }
@@ -65,6 +69,22 @@ export class Hud {
     const r = clamp(k, 0, 1)
     this.boostFill.style.transform = `scaleX(${r})`
     this.boostFill.classList.toggle('charging', r < 1)
+  }
+
+  /**
+   * Frostile hit. `k` is the fraction of the slow left, so the rime creeps in
+   * hard on impact and thaws out as you get your speed back. Blue and
+   * edge-weighted on purpose -- the red damage vignette owns the same screen
+   * area, and the two must never be mistaken for each other.
+   */
+  setFrozen(k) {
+    const r = clamp(k, 0, 1)
+    const on = r > 0
+    this.frost.style.opacity = on ? (0.35 + 0.65 * r).toFixed(2) : 0
+    if (on !== this._frozen) {
+      this._frozen = on
+      this.frostLabel.classList.toggle('hidden', !on)
+    }
   }
 
   /**
@@ -155,6 +175,10 @@ export class Hud {
 
   clearKills() {
     this.killfeed.innerHTML = ''
+  }
+
+  setPowerupDebug(on) {
+    this.powerupDebugEl.classList.toggle('hidden', !on)
   }
 
   setDebug(text) {

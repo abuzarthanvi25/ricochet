@@ -115,6 +115,16 @@ export const CFG = {
     },
     permaboost: {
       color: 0xffc23d, // gold
+      // Not just "boost has no cooldown" -- the whole loadout speeds up.
+      // speedMul multiplies thrust AND the speed cap, and is kept separate from
+      // the frostile slow so the two stack multiplicatively instead of whichever
+      // landed last winning outright.
+      speedMul: 1.45,
+      projSpeedMul: 1.35,
+      boostMul: 1.5,
+      // Held FOV while active, so the extra speed is felt and not just measured.
+      // Sits between the resting 75 and the boost kick at 88.
+      fov: 82,
     },
     frost: {
       color: 0x7ab8ff, // periwinkle -- deliberately off cyan, see above

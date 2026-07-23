@@ -51,6 +51,10 @@ export class Game {
       sfx.hurt()
     }
     this.player.onPowerupEnd = () => sfx.powerDown()
+    this.player.onSlowed = () => {
+      sfx.freeze()
+      this.rig.addShake(0.25)
+    }
     this.player.respawnTimer = 0
 
     this.enemies = []
@@ -129,6 +133,7 @@ export class Game {
     this.hud.setHp(this.player.hp, CFG.bot.maxHp)
     this.hud.setWarn(false)
     this.hud.setPowerup(null, 0)
+    this.hud.setFrozen(0)
     this.attackers.clear()
     this.nameplates.hideAll()
   }
@@ -217,6 +222,20 @@ export class Game {
     this.lights.commit(this.camera.position)
   }
 
+  /**
+   * Debug-only: hand the player a powerup directly. Deliberately does NOT touch
+   * the match budget or the pickup pool -- the point is to test a powerup in
+   * isolation without burning one of the four a real match gets. Re-granting the
+   * same one refreshes its timer. Gated behind F2 in main.js.
+   */
+  grantPowerup(id) {
+    if (!POWERUPS[id] || !this.player.alive) return false
+    this.player.equip(id)
+    this.hud.announcePowerup(POWERUPS[id])
+    sfx.powerUp()
+    return true
+  }
+
   _onPowerupCollected(bot, type) {
     const preset = POWERUPS[type]
     if (bot === this.player) {
@@ -240,6 +259,7 @@ export class Game {
     this.hud.setCooldown(p.alive ? 1 - clamp(p.fireCd / CFG.player.fireCooldown, 0, 1) : 0)
     this.hud.setBoost(p.alive ? 1 - clamp(p.boostCd / CFG.player.boostCooldown, 0, 1) : 0)
     this.hud.setPowerup(p.alive ? p.powerup : null, p.powerup01())
+    this.hud.setFrozen(p.alive ? p.slowTimer / CFG.powerups.frost.slowDuration : 0)
 
     const threat = p.alive ? this.projectiles.ricochetThreatTo(p.pos, 26, p.id) : null
     const on = !!threat
@@ -263,7 +283,8 @@ export class Game {
       dir,
       scale,
       owner.projKind(),
-      owner.projMod()
+      owner.projMod(),
+      owner.projSpeed()
     )
     if (p) sfx.fire(origin.distanceTo(this.camera.position))
     return p

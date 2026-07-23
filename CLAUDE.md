@@ -21,6 +21,9 @@ npm run format    # prettier --write
 ```
 
 Node 18+ (developed on 24.12). `?perf` or `F4` in-game opens stats-gl + lil-gui.
+`F2` is powerup debug: `1`–`4` grant any powerup, `0` clears. Grants bypass the
+4-per-match budget. It claims the digits, so the `F3` clip inspector is off while
+it is on.
 
 Formatting is Prettier's (no semicolons, single quotes, 100 cols); ESLint covers
 correctness only, with every stylistic rule disabled by `eslint-config-prettier`.
@@ -117,6 +120,15 @@ it.
 when the origin is inside a sphere, so reflecting there on an outward normal
 fires the shot back in and traps it forever. A projectile caught inside a bubble
 must fall through to the body — `weapons/projectiles.js` guards this explicitly.
+
+**Projectile speed lives on the projectile, not in `CFG.proj.speed`.** Permaboost
+multiplies it, so `p.speed` is captured at spawn and used by both the sweep and
+the homing steer. `Enemy._tryFire` must solve the intercept with `this.projSpeed()`
+or a permaboosted bot over-leads every shot.
+
+**Frostile slow and permaboost are separate multipliers** (`speedMul` and
+`powerMul`) that multiply in `integrate()`. Collapsing them into one field means
+whichever effect landed last silently cancels the other.
 
 **Additive + `toneMapped: false` feeds bloom directly.** Opacities that look
 sane on paper blow out to solid white: the shield started at 0.1/0.45 and hid

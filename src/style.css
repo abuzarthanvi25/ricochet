@@ -52,6 +52,63 @@ canvas#scene {
   transition: opacity 0.25s ease-out;
 }
 
+/* ---- frostile hit ---- */
+
+/* Deliberately blue and edge-weighted so it never reads as the red damage
+   vignette. Two layers: a cold wash creeping in from the corners, and a
+   crystalline rime that only shows at the very edges of the screen. */
+#frost {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  /* Saturated blue, not a white wash. An earlier pass greyed the whole scene
+     out and read as fog rather than ice. */
+  background: radial-gradient(
+    ellipse at center,
+    transparent 38%,
+    rgba(58, 132, 224, 0.34) 76%,
+    rgba(122, 184, 255, 0.72) 100%,
+    rgba(214, 240, 255, 0.92) 125%
+  );
+  transition: opacity 0.18s linear;
+}
+
+/* Crystalline rime, confined hard to the outer edge. Conic slivers from the
+   centre become long radial streaks if you let them run — which reads as speed
+   lines, exactly the wrong metaphor and a direct clash with permaboost. The
+   mask keeps them in the outermost ~20% where they read as ice on glass. */
+#frost .frost-rime {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-conic-gradient(
+      from 0deg at 50% 50%,
+      rgba(198, 231, 255, 0.55) 0deg 0.7deg,
+      transparent 0.7deg 6deg
+    ),
+    repeating-conic-gradient(
+      from 3deg at 50% 50%,
+      rgba(236, 250, 255, 0.4) 0deg 0.35deg,
+      transparent 0.35deg 11deg
+    );
+  -webkit-mask-image: radial-gradient(ellipse at center, transparent 80%, #000 104%);
+  mask-image: radial-gradient(ellipse at center, transparent 80%, #000 104%);
+  mix-blend-mode: screen;
+}
+
+#frost-label {
+  position: absolute;
+  left: 50%;
+  top: calc(50% - 96px);
+  transform: translateX(-50%);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: #d6f0ff;
+  text-shadow: 0 0 14px rgba(122, 184, 255, 0.9);
+  animation: pulse 0.7s ease-in-out infinite alternate;
+}
+
 /* ---- crosshair ---- */
 
 #crosshair {
@@ -473,6 +530,57 @@ canvas#scene {
   stroke-linejoin: round;
   filter: drop-shadow(0 0 5px currentColor);
   animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+/* ---- powerup debug mode ---- */
+
+/* Bottom-right is the only free corner: the killfeed and the lil-gui perf panel
+   both live at top-right, and stats-gl plus the F3 readout own top-left. */
+#powerup-debug {
+  position: absolute;
+  bottom: 30px;
+  right: 26px;
+  padding: 10px 14px;
+  text-align: right;
+  background: rgba(5, 7, 13, 0.72);
+  border: 1px solid rgba(255, 194, 61, 0.45);
+  color: var(--amber);
+}
+
+#powerup-debug .pd-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  margin-bottom: 7px;
+}
+
+#powerup-debug .pd-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #dff6ff;
+}
+
+#powerup-debug kbd {
+  display: inline-block;
+  min-width: 17px;
+  margin-right: 6px;
+  padding: 1px 0;
+  text-align: center;
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid rgba(223, 246, 255, 0.35);
+  border-radius: 2px;
+}
+
+#powerup-debug .pd-note {
+  margin-top: 8px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+  color: #dff6ff;
 }
 
 /* ---- debug ---- */

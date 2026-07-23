@@ -47,18 +47,23 @@ export class Player extends Bot {
 
     // Permaboost zeroes the cooldown rather than removing the edge trigger --
     // holding Q must still not chain-dash. See the note in core/input.js.
+    // Thrust and top speed come from `powerMul` in Bot.integrate, and shot speed
+    // from projSpeed(); this handles the dash itself.
+    const PB = CFG.powerups.permaboost
     const permaboost = this.powerup === 'permaboost'
     if (permaboost) this.boostCd = 0
     else if (this.boostCd > 0) this.boostCd -= dt
 
     if (consumeBoost() && this.boostCd <= 0) {
       _dir.copy(w.lengthSq() > 1e-6 ? w : rig.forward)
-      this.vel.addScaledVector(_dir, CFG.player.boostImpulse)
+      this.vel.addScaledVector(_dir, CFG.player.boostImpulse * (permaboost ? PB.boostMul : 1))
       if (!permaboost) this.boostCd = CFG.player.boostCooldown
       this.overspeed = 0.9
       game.onPlayerBoost()
     }
-    rig.kickFov(this.overspeed > 0.35)
+    // Permaboost holds a wider FOV for its whole duration, so the speed reads on
+    // screen instead of only in the numbers. A dash still kicks past it.
+    rig.setFov(this.overspeed > 0.35 ? CFG.camera.fovBoost : permaboost ? PB.fov : CFG.camera.fov)
 
     if (isFiring() && this.canFire()) {
       this.getMuzzleWorld(_origin)

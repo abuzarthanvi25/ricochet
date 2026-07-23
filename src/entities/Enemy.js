@@ -264,7 +264,9 @@ export class Enemy extends Bot {
     if (!segmentClear(_muzzle, target.pos, _losBlockers)) return
 
     // Lead the shot. If the target somehow outruns the projectile, aim direct.
-    const t = interceptTime(_muzzle, target.pos, target.vel, CFG.proj.speed)
+    // Uses this bot's own muzzle velocity: a permaboosted bot fires faster, and
+    // solving with the nominal speed would make it consistently over-lead.
+    const t = interceptTime(_muzzle, target.pos, target.vel, this.projSpeed())
     if (t > 0 && t < 4) _aimAt.copy(target.pos).addScaledVector(target.vel, t)
     else _aimAt.copy(target.pos)
 
