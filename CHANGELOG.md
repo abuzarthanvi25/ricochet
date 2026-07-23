@@ -50,6 +50,17 @@ Merged to `develop`, not yet released to `main`.
     the player who fired it.
   - Bots break off to contest a pickup within 22 units (`AI.COLLECT`), and their
     nameplate shows what they are holding. A bot's powerup is lost on death.
+- **Controls are now on the pause menu too**, and the title screen carries a
+  powerup legend. Both are built once in `ui/overlays.js` and injected into every
+  screen that asks for them (`[data-controls-group]` / `[data-powerup-group]`),
+  following the existing difficulty-selector pattern — two copies of the key
+  legend in the HTML is how they end up disagreeing after a rebind. The legend
+  reads its rows straight off the `POWERUPS` registry, so it cannot go stale.
+  `Esc` is now listed as well; it was never documented in-game.
+  - The fuller title screen stacked to ~800px, which pushed CLICK TO ENGAGE
+    below the fold on a 768p laptop. A `max-height: 860px` media query compacts
+    it to 642px; `.screen` also gained `max-height: 100vh; overflow-y: auto` as a
+    backstop for anything shorter still.
 - **Powerup debug mode (`F2`)** — grants any powerup on `1`–`4`, clears on `0`,
   so a powerup can be tested without waiting for one of the four a match gets.
   Grants bypass the match budget entirely and re-pressing a key refreshes the

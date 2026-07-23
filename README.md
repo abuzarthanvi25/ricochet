@@ -52,6 +52,10 @@ so you can sit on one for as long as you need. It claims the digit keys while
 active, so the `F3` clip inspector is unavailable until you switch it back off —
 which also drops whatever you were holding.
 
+The key legend appears on both the title screen and the pause menu, and the
+powerup legend on the title screen. Both are built once in `ui/overlays.js` and
+injected into every screen that asks for them, so they cannot drift apart.
+
 Ascend/descend stay locked to world axes on purpose. That single decision is
 what keeps 6-DOF flight readable instead of nauseating — "up" never rotates out
 from under you, no matter where the camera is pointing.

@@ -621,6 +621,11 @@ canvas#scene {
   text-align: center;
   padding: 30px;
   max-width: 720px;
+  /* The title screen carries controls, the powerup legend and the difficulty
+     picker; on a short window that overflows a centred flex child, which clips
+     rather than scrolls. */
+  max-height: 100vh;
+  overflow-y: auto;
 }
 
 .screen h1 {
@@ -733,6 +738,111 @@ button:disabled {
   cursor: default;
   transform: none;
   box-shadow: none;
+}
+
+/* ---- powerup legend ---- */
+
+.powerup-guide {
+  margin-bottom: 30px;
+}
+
+.pg-label {
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  opacity: 0.45;
+  margin-bottom: 12px;
+}
+
+.pg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: left;
+  /* Narrower than the screen so the name column lines up under itself and the
+     blurbs read as one block rather than four ragged lines. */
+  max-width: 580px;
+  margin: 0 auto;
+}
+
+.pg-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.pg-icon {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.pg-name {
+  flex: 0 0 96px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  font-size: 11px;
+}
+
+.pg-blurb {
+  color: #dff6ff;
+  opacity: 0.55;
+  letter-spacing: 0.04em;
+}
+
+.pg-note {
+  margin-top: 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  opacity: 0.4;
+}
+
+/* The title screen carries the tagline, controls, powerup legend, difficulty
+   picker and the play button. At full size that stacks to ~800px, which pushes
+   CLICK TO ENGAGE below the fold on a 768p laptop. Compact rather than rely on
+   the scrollbar -- nobody scrolls a title screen to find the start button. */
+@media (max-height: 860px) {
+  .screen {
+    padding: 14px 30px;
+  }
+  .screen h1 {
+    font-size: 48px;
+    margin-bottom: 10px;
+  }
+  .screen h1.paused {
+    font-size: 38px;
+  }
+  .tagline {
+    font-size: 14px;
+    line-height: 1.55;
+    margin-bottom: 18px;
+  }
+  .controls {
+    margin-bottom: 20px;
+  }
+  .ctrl-col {
+    gap: 8px;
+  }
+  .powerup-guide,
+  .difficulty {
+    margin-bottom: 18px;
+  }
+  .pg-list {
+    gap: 5px;
+  }
+  .pg-note {
+    margin-top: 9px;
+  }
+  button {
+    padding: 12px 36px;
+    font-size: 15px;
+  }
 }
 
 /* ---- difficulty selector ---- */

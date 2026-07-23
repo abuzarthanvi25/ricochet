@@ -122,18 +122,17 @@
           <strong>After its first bounce, your own shot will kill you.</strong>
         </p>
 
-        <div class="controls">
-          <div class="ctrl-col">
-            <div class="ctrl">
-              <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Thrust</span>
-            </div>
-            <div class="ctrl"><kbd>Space</kbd><span>Ascend</span></div>
-            <div class="ctrl"><kbd>Shift</kbd><span>Descend</span></div>
-          </div>
-          <div class="ctrl-col">
-            <div class="ctrl"><kbd>Q</kbd><kbd class="alt">RMB</kbd><span>Boost dash</span></div>
-            <div class="ctrl"><kbd>Mouse</kbd><span>Aim</span></div>
-            <div class="ctrl"><kbd>LMB</kbd><span>Fire</span></div>
+        <!-- Controls and the powerup guide are built once in ui/overlays.js and
+             injected into every screen that asks for them, so the pause menu can
+             never drift out of sync with the title screen. -->
+        <div class="controls" data-controls-group="title"></div>
+
+        <div class="powerup-guide" data-powerup-group="title">
+          <div class="pg-label">POWERUPS</div>
+          <div class="pg-list"></div>
+          <div class="pg-note">
+            Four spawn per match — one of each, and that is all anybody gets. One slot, no swapping.
+            Everything expires in 8s.
           </div>
         </div>
 
@@ -174,6 +173,8 @@
       <section id="screen-paused" class="screen hidden">
         <h1 class="paused">PAUSED</h1>
         <p class="tagline">Pointer released.</p>
+
+        <div class="controls" data-controls-group="paused"></div>
 
         <div class="difficulty" data-difficulty-group="paused">
           <div class="diff-label">THREAT LEVEL</div>
