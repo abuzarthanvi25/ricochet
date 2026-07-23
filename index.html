@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>RICOCHET</title>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- ===================== HUD ===================== -->
+  <div id="hud" class="hidden">
+    <div id="vignette"></div>
+    <div id="nameplates"></div>
+
+    <div id="crosshair">
+      <svg viewBox="0 0 100 100" width="100" height="100">
+        <circle class="ring-bg" cx="50" cy="50" r="26" />
+        <circle id="cooldown-ring" cx="50" cy="50" r="26" transform="rotate(-90 50 50)" />
+        <g class="ticks">
+          <line x1="50" y1="30" x2="50" y2="38" />
+          <line x1="50" y1="62" x2="50" y2="70" />
+          <line x1="30" y1="50" x2="38" y2="50" />
+          <line x1="62" y1="50" x2="70" y2="50" />
+        </g>
+        <circle class="dot" cx="50" cy="50" r="1.6" />
+      </svg>
+      <div id="hitmarker">
+        <svg viewBox="0 0 100 100" width="100" height="100">
+          <line x1="34" y1="34" x2="44" y2="44" />
+          <line x1="66" y1="34" x2="56" y2="44" />
+          <line x1="34" y1="66" x2="44" y2="56" />
+          <line x1="66" y1="66" x2="56" y2="56" />
+        </svg>
+      </div>
+    </div>
+
+    <div id="warn-inbound" class="hidden">INCOMING RICOCHET</div>
+
+    <div id="bottom-left">
+      <div class="stat-label">INTEGRITY</div>
+      <div class="bar hp"><div id="hp-fill" class="fill"></div></div>
+      <div class="stat-label boost-label">BOOST</div>
+      <div class="bar boost"><div id="boost-fill" class="fill"></div></div>
+    </div>
+
+    <div id="scoreboard">
+      <span class="side you"><span class="tag">YOU</span><span id="score-you">0</span></span>
+      <span class="dash">/</span>
+      <span class="side them"><span id="score-them">0</span><span class="tag">BOTS</span></span>
+      <div class="target">FIRST TO <span id="score-target">15</span></div>
+    </div>
+
+    <div id="killfeed"></div>
+
+    <div id="debug" class="hidden"></div>
+  </div>
+
+  <!-- ===================== OVERLAYS ===================== -->
+  <div id="overlay">
+    <!-- Title -->
+    <section id="screen-title" class="screen">
+      <h1>RICOCHET</h1>
+      <p class="tagline">Zero-g arena. Every shot bounces.<br />
+        <strong>After its first bounce, your own shot will kill you.</strong></p>
+
+      <div class="controls">
+        <div class="ctrl-col">
+          <div class="ctrl"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Thrust</span></div>
+          <div class="ctrl"><kbd>Space</kbd><span>Ascend</span></div>
+          <div class="ctrl"><kbd>Shift</kbd><span>Descend</span></div>
+        </div>
+        <div class="ctrl-col">
+          <div class="ctrl"><kbd>Q</kbd><kbd class="alt">RMB</kbd><span>Boost dash</span></div>
+          <div class="ctrl"><kbd>Mouse</kbd><span>Aim</span></div>
+          <div class="ctrl"><kbd>LMB</kbd><span>Fire</span></div>
+        </div>
+      </div>
+
+      <div class="difficulty" data-difficulty-group="title">
+        <div class="diff-label">THREAT LEVEL</div>
+        <div class="diff-options"></div>
+        <div class="diff-blurb"></div>
+      </div>
+
+      <button id="btn-play">CLICK TO ENGAGE</button>
+      <p id="loading">loading assets…</p>
+      <p class="credit">Model: <em>Shooter Bot</em> by Aurantiko — CC-BY-4.0</p>
+    </section>
+
+    <!-- Game over -->
+    <section id="screen-over" class="screen hidden">
+      <h1 class="lose">SCRAPPED</h1>
+      <p id="over-reason" class="tagline"></p>
+      <p class="final">YOU <span id="over-you">0</span> &nbsp;/&nbsp; <span id="over-them">0</span> BOTS</p>
+      <button id="btn-retry">REDEPLOY</button>
+      <p class="credit">Model: <em>Shooter Bot</em> by Aurantiko — CC-BY-4.0</p>
+    </section>
+
+    <!-- Victory -->
+    <section id="screen-win" class="screen hidden">
+      <h1 class="win">ARENA CLEARED</h1>
+      <p class="tagline">Every bot in this box is now debris.</p>
+      <p class="final">YOU <span id="win-you">0</span> &nbsp;/&nbsp; <span id="win-them">0</span> BOTS</p>
+      <button id="btn-again">RUN IT BACK</button>
+      <p class="credit">Model: <em>Shooter Bot</em> by Aurantiko — CC-BY-4.0</p>
+    </section>
+
+    <!-- Paused (pointer lock lost mid-match) -->
+    <section id="screen-paused" class="screen hidden">
+      <h1 class="paused">PAUSED</h1>
+      <p class="tagline">Pointer released.</p>
+
+      <div class="difficulty" data-difficulty-group="paused">
+        <div class="diff-label">THREAT LEVEL</div>
+        <div class="diff-options"></div>
+        <div class="diff-blurb"></div>
+        <div class="diff-note">Applies immediately — no need to restart.</div>
+      </div>
+
+      <button id="btn-resume">RESUME</button>
+    </section>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

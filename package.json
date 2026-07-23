@@ -1,0 +1,19 @@
+{
+  "name": "ricochet",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Zero-g arena shooter where your own ricochets can kill you",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node test/mechanics.mjs"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "vite": "^7.1.5"
+  }
+}
