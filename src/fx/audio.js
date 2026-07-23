@@ -48,7 +48,8 @@ function tone({ type = 'sine', from, to, attack = 0.005, decay = 0.15, peak = 0.
   osc.detune.value = detune
   const t = ctx.currentTime
   osc.frequency.setValueAtTime(from, t)
-  if (to !== undefined) osc.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + attack + decay)
+  if (to !== undefined)
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + attack + decay)
 
   const env = envGain(attack, decay, peak)
   osc.connect(env.node)
@@ -57,7 +58,14 @@ function tone({ type = 'sine', from, to, attack = 0.005, decay = 0.15, peak = 0.
 }
 
 let noiseBuffer = null
-function noise({ attack = 0.002, decay = 0.3, peak = 0.6, filterFrom = 4000, filterTo = 200, q = 1 }) {
+function noise({
+  attack = 0.002,
+  decay = 0.3,
+  peak = 0.6,
+  filterFrom = 4000,
+  filterTo = 200,
+  q = 1,
+}) {
   if (!ctx || !enabled) return
   if (!noiseBuffer) {
     const len = ctx.sampleRate * 1.0
@@ -88,10 +96,34 @@ function gainFor(dist, falloff = 45) {
   return Math.max(0, 1 - dist / falloff)
 }
 
+/**
+ * Voice cap. Every call here builds fresh oscillator/gain nodes, and a chaotic
+ * fight can produce dozens of bounces a second across 40+ live projectiles.
+ * Past a handful of simultaneous voices the extras are inaudible anyway, so
+ * budget them per short window rather than letting node churn hit the main
+ * thread.
+ */
+const VOICE_WINDOW_MS = 60
+const voiceBudget = new Map()
+
+function takeVoice(kind, max) {
+  if (!ctx) return false
+  const now = ctx.currentTime * 1000
+  let slot = voiceBudget.get(kind)
+  if (!slot || now - slot.start > VOICE_WINDOW_MS) {
+    slot = { start: now, used: 0 }
+    voiceBudget.set(kind, slot)
+  }
+  if (slot.used >= max) return false
+  slot.used++
+  return true
+}
+
 export const sfx = {
   fire(dist = 0) {
     const g = gainFor(dist, 60)
     if (g <= 0.02) return
+    if (!takeVoice('fire', 4)) return
     tone({ type: 'square', from: 780, to: 190, attack: 0.004, decay: 0.09, peak: 0.28 * g })
     tone({ type: 'sawtooth', from: 320, to: 90, attack: 0.004, decay: 0.13, peak: 0.16 * g })
   },
@@ -99,14 +131,23 @@ export const sfx = {
   bounce(bounces, dist = 0) {
     const g = gainFor(dist, 55)
     if (g <= 0.02) return
+    if (!takeVoice('bounce', 4)) return
     // Pitch climbs with each bounce -- the audible "this is armed" cue.
     const base = 520 * Math.pow(1.28, Math.min(bounces, 6))
-    tone({ type: 'triangle', from: base, to: base * 0.55, attack: 0.002, decay: 0.075, peak: 0.3 * g })
+    tone({
+      type: 'triangle',
+      from: base,
+      to: base * 0.55,
+      attack: 0.002,
+      decay: 0.075,
+      peak: 0.3 * g,
+    })
   },
 
   explode(dist = 0) {
     const g = gainFor(dist, 70)
     if (g <= 0.02) return
+    if (!takeVoice('explode', 3)) return
     noise({ attack: 0.004, decay: 0.42, peak: 0.75 * g, filterFrom: 2600, filterTo: 90 })
     tone({ type: 'sine', from: 160, to: 34, attack: 0.006, decay: 0.36, peak: 0.5 * g })
   },
@@ -138,13 +179,20 @@ export const sfx = {
 
   win() {
     ;[523, 659, 784, 1047].forEach((f, i) => {
-      setTimeout(() => tone({ type: 'square', from: f, to: f, attack: 0.01, decay: 0.3, peak: 0.25 }), i * 110)
+      setTimeout(
+        () => tone({ type: 'square', from: f, to: f, attack: 0.01, decay: 0.3, peak: 0.25 }),
+        i * 110
+      )
     })
   },
 
   lose() {
     ;[392, 330, 262, 196].forEach((f, i) => {
-      setTimeout(() => tone({ type: 'sawtooth', from: f, to: f * 0.9, attack: 0.02, decay: 0.4, peak: 0.28 }), i * 150)
+      setTimeout(
+        () =>
+          tone({ type: 'sawtooth', from: f, to: f * 0.9, attack: 0.02, decay: 0.4, peak: 0.28 }),
+        i * 150
+      )
     })
   },
 }

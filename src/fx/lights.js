@@ -2,12 +2,18 @@ import * as THREE from 'three'
 import { CFG } from '../config.js'
 
 /**
- * A handful of point lights shared between every projectile and blast.
+ * A small, FIXED set of point lights shared between projectiles and blasts.
  *
- * One light per projectile would mean up to ~96 dynamic lights, which recompiles
- * shaders and destroys the frame rate. Instead we gather candidates each frame
- * and hand the pool to the ones nearest the camera -- the only ones anybody can
- * actually see lighting anything.
+ * Critical detail: these lights are created visible and NEVER toggled. three.js
+ * bakes the number of visible lights into the shader program cache key, so
+ * flipping `visible` as projectiles come and go changes that count and forces
+ * every material in the scene to recompile mid-frame. Measured cost of a single
+ * such transition here was 97-177ms -- a hard, visible freeze, and the reason
+ * the game stuttered "randomly" during chaotic fights (each distinct light
+ * count only stalls the first time it occurs).
+ *
+ * Unused lights are parked at intensity 0 instead. The count never changes, so
+ * the programs compile once and stay cached.
  */
 export class LightPool {
   constructor(scene) {
@@ -16,7 +22,9 @@ export class LightPool {
 
     for (let i = 0; i < CFG.pools.lights; i++) {
       const l = new THREE.PointLight(0xffffff, 0, CFG.fx.lightDistance, 2)
-      l.visible = false
+      l.visible = true // never changes -- see note above
+      // Park far outside the arena so a zero-intensity light cannot contribute.
+      l.position.set(0, -1000, 0)
       scene.add(l)
       this.lights.push(l)
     }
@@ -27,14 +35,7 @@ export class LightPool {
   }
 
   add(pos, color, intensity) {
-    this.candidates.push({
-      x: pos.x,
-      y: pos.y,
-      z: pos.z,
-      color,
-      intensity,
-      d: 0,
-    })
+    this.candidates.push({ x: pos.x, y: pos.y, z: pos.z, color, intensity, d: 0 })
   }
 
   commit(cameraPos) {
@@ -53,11 +54,10 @@ export class LightPool {
       l.position.set(c.x, c.y, c.z)
       l.color.copy(c.color)
       l.intensity = c.intensity
-      l.visible = true
     }
     for (let i = n; i < this.lights.length; i++) {
-      this.lights[i].visible = false
       this.lights[i].intensity = 0
+      this.lights[i].position.set(0, -1000, 0)
     }
   }
 }

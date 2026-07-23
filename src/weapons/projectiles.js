@@ -7,47 +7,85 @@ const _dir = new THREE.Vector3()
 const _normal = new THREE.Vector3()
 const _wallNormal = new THREE.Vector3()
 const _tmp = new THREE.Vector3()
+const _mat4 = new THREE.Matrix4()
+const _scaleV = new THREE.Vector3(1, 1, 1)
+const _quat = new THREE.Quaternion()
+const _hidden = new THREE.Vector3(0, -10000, 0)
 const _colFresh = new THREE.Color(CFG.proj.colorFresh)
 const _colArmed = new THREE.Color(CFG.proj.colorArmed)
 const _colHot = new THREE.Color(CFG.proj.colorFullyArmed)
 
 const EPS = 1e-5
+const TRAIL = CFG.fx.trailLength
+const SEGS = TRAIL - 1 // line segments per trail
 
+/**
+ * All projectiles render in exactly two draw calls: one InstancedMesh for the
+ * glowing heads, one LineSegments holding every trail. Previously each
+ * projectile owned its own Mesh plus its own Line with its own buffer upload,
+ * which put ~90 draw calls and ~90 per-frame buffer uploads on screen during a
+ * busy fight.
+ */
 export class ProjectileSystem {
   constructor(scene) {
     this.scene = scene
     this.pool = []
     this.active = []
+    this.free = []
 
-    const geo = new THREE.SphereGeometry(CFG.proj.radius, 10, 8)
+    const N = CFG.pools.projectiles
 
-    for (let i = 0; i < CFG.pools.projectiles; i++) {
-      const mat = new THREE.MeshBasicMaterial({
-        color: CFG.proj.colorFresh,
-        toneMapped: false, // let it blow out into the bloom pass
-      })
-      const mesh = new THREE.Mesh(geo, mat)
-      mesh.visible = false
-      mesh.frustumCulled = false
-      scene.add(mesh)
+    // --- heads: one instanced sphere ---
+    const headGeo = new THREE.SphereGeometry(CFG.proj.radius, 10, 8)
+    // three's color_fragment chunk only applies vColor under USE_COLOR, so
+    // instanceColor alone never reaches the fragment shader. vertexColors plus
+    // an all-white geometry colour attribute opens that path; vColor then ends
+    // up as 1 * white * instanceColor, i.e. exactly the per-instance tint.
+    const vertCount = headGeo.attributes.position.count
+    const white = new Float32Array(vertCount * 3).fill(1)
+    headGeo.setAttribute('color', new THREE.BufferAttribute(white, 3))
 
-      const n = CFG.fx.trailLength
-      const trailGeo = new THREE.BufferGeometry()
-      trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3))
-      trailGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3))
-      const trailMat = new THREE.LineBasicMaterial({
-        vertexColors: true,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        toneMapped: false,
-      })
-      const trail = new THREE.Line(trailGeo, trailMat)
-      trail.visible = false
-      trail.frustumCulled = false
-      scene.add(trail)
+    const headMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      vertexColors: true,
+      toneMapped: false,
+    })
+    this.heads = new THREE.InstancedMesh(headGeo, headMat, N)
+    this.heads.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    this.heads.frustumCulled = false
+    this.heads.count = N
+    // setColorAt allocates instanceColor on first use.
+    this.heads.setColorAt(0, _colFresh)
+    this.heads.instanceColor.setUsage(THREE.DynamicDrawUsage)
+    scene.add(this.heads)
 
+    // --- trails: one LineSegments for the whole pool ---
+    const trailGeo = new THREE.BufferGeometry()
+    this.trailPos = new Float32Array(N * SEGS * 2 * 3)
+    this.trailCol = new Float32Array(N * SEGS * 2 * 3)
+    trailGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(this.trailPos, 3).setUsage(THREE.DynamicDrawUsage)
+    )
+    trailGeo.setAttribute(
+      'color',
+      new THREE.BufferAttribute(this.trailCol, 3).setUsage(THREE.DynamicDrawUsage)
+    )
+    const trailMat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+    })
+    this.trails = new THREE.LineSegments(trailGeo, trailMat)
+    this.trails.frustumCulled = false
+    scene.add(this.trails)
+    this.trailGeo = trailGeo
+
+    for (let i = 0; i < N; i++) {
       this.pool.push({
+        index: i,
         alive: false,
         ownerId: -1,
         ownerTeam: -1,
@@ -56,20 +94,34 @@ export class ProjectileSystem {
         vel: new THREE.Vector3(),
         age: 0,
         bounces: 0,
-        mesh,
-        mat,
-        trail,
-        trailGeo,
-        trailPts: [],
+        // Ring buffer of trail points, newest first, flat xyz.
+        trailPts: new Float32Array(TRAIL * 3),
+        trailCount: 0,
         color: new THREE.Color(),
       })
+      this.free.push(i)
     }
+
+    this._hideAllInstances()
+  }
+
+  _hideAllInstances() {
+    for (let i = 0; i < this.pool.length; i++) this._hideInstance(i)
+    this.heads.instanceMatrix.needsUpdate = true
+  }
+
+  _hideInstance(i) {
+    _mat4.compose(_hidden, _quat, _scaleV)
+    this.heads.setMatrixAt(i, _mat4)
   }
 
   spawn(ownerId, ownerTeam, origin, dir, damageScale = 1) {
-    const p = this.pool.find((x) => !x.alive)
-    if (!p) return null // pool exhausted; dropping a shot beats stuttering
+    // O(1) free list; the old `pool.find(x => !x.alive)` was a linear scan on
+    // every single shot.
+    const idx = this.free.pop()
+    if (idx === undefined) return null // pool exhausted; dropping a shot beats stuttering
 
+    const p = this.pool[idx]
     p.alive = true
     p.ownerId = ownerId
     p.ownerTeam = ownerTeam
@@ -78,10 +130,7 @@ export class ProjectileSystem {
     p.vel.copy(dir).normalize().multiplyScalar(CFG.proj.speed)
     p.age = 0
     p.bounces = 0
-    p.trailPts.length = 0
-    p.mesh.visible = true
-    p.mesh.position.copy(origin)
-    p.trail.visible = true
+    p.trailCount = 0
 
     this._applyHeat(p)
     this._pushTrail(p)
@@ -101,34 +150,66 @@ export class ProjectileSystem {
       const t = clamp((p.bounces - 1) / Math.max(1, CFG.proj.bouncesToFullHeat - 1), 0, 1)
       p.color.copy(_colArmed).lerp(_colHot, t)
     }
-    p.mat.color.copy(p.color)
-
-    const colors = p.trailGeo.attributes.color
-    const n = CFG.fx.trailLength
-    for (let i = 0; i < n; i++) {
-      const fade = 1 - i / n
-      colors.setXYZ(i, p.color.r * fade, p.color.g * fade, p.color.b * fade)
-    }
-    colors.needsUpdate = true
+    this.heads.setColorAt(p.index, p.color)
+    this.heads.instanceColor.needsUpdate = true
   }
 
+  /** Push the current position onto the head of the trail ring buffer. */
   _pushTrail(p) {
-    p.trailPts.unshift(p.pos.x, p.pos.y, p.pos.z)
-    const max = CFG.fx.trailLength * 3
-    if (p.trailPts.length > max) p.trailPts.length = max
-
-    const attr = p.trailGeo.attributes.position
-    const arr = attr.array
-    const count = p.trailPts.length / 3
-    for (let i = 0; i < p.trailPts.length; i++) arr[i] = p.trailPts[i]
-    // Collapse unused vertices onto the last real one so nothing streaks to 0,0,0.
-    for (let i = p.trailPts.length; i < arr.length; i += 3) {
-      arr[i] = p.trailPts[p.trailPts.length - 3]
-      arr[i + 1] = p.trailPts[p.trailPts.length - 2]
-      arr[i + 2] = p.trailPts[p.trailPts.length - 1]
+    const pts = p.trailPts
+    // Shift back by one point (small fixed-size copy, no allocation).
+    for (let i = Math.min(p.trailCount, TRAIL - 1); i > 0; i--) {
+      pts[i * 3] = pts[(i - 1) * 3]
+      pts[i * 3 + 1] = pts[(i - 1) * 3 + 1]
+      pts[i * 3 + 2] = pts[(i - 1) * 3 + 2]
     }
-    attr.needsUpdate = true
-    p.trailGeo.setDrawRange(0, Math.max(2, count))
+    pts[0] = p.pos.x
+    pts[1] = p.pos.y
+    pts[2] = p.pos.z
+    if (p.trailCount < TRAIL) p.trailCount++
+  }
+
+  /** Write every active trail into the shared segment buffer, once per frame. */
+  _writeTrailBuffer() {
+    const pos = this.trailPos
+    const col = this.trailCol
+    let v = 0 // vertex cursor
+
+    for (const p of this.active) {
+      const pts = p.trailPts
+      const segs = Math.max(0, p.trailCount - 1)
+      for (let s = 0; s < segs; s++) {
+        const a = s * 3
+        const b = (s + 1) * 3
+        const fadeA = 1 - s / TRAIL
+        const fadeB = 1 - (s + 1) / TRAIL
+
+        pos[v * 3] = pts[a]
+        pos[v * 3 + 1] = pts[a + 1]
+        pos[v * 3 + 2] = pts[a + 2]
+        col[v * 3] = p.color.r * fadeA
+        col[v * 3 + 1] = p.color.g * fadeA
+        col[v * 3 + 2] = p.color.b * fadeA
+        v++
+
+        pos[v * 3] = pts[b]
+        pos[v * 3 + 1] = pts[b + 1]
+        pos[v * 3 + 2] = pts[b + 2]
+        col[v * 3] = p.color.r * fadeB
+        col[v * 3 + 1] = p.color.g * fadeB
+        col[v * 3 + 2] = p.color.b * fadeB
+        v++
+      }
+    }
+
+    this.trailGeo.setDrawRange(0, v)
+    // Upload only the range actually written, not the whole pool's worth.
+    const posAttr = this.trailGeo.attributes.position
+    const colAttr = this.trailGeo.attributes.color
+    posAttr.addUpdateRange(0, v * 3)
+    colAttr.addUpdateRange(0, v * 3)
+    posAttr.needsUpdate = true
+    colAttr.needsUpdate = true
   }
 
   update(dt, game) {
@@ -141,7 +222,6 @@ export class ProjectileSystem {
         continue
       }
 
-      p.mesh.position.copy(p.pos)
       this._pushTrail(p)
 
       if (p.age >= CFG.proj.lifetime) {
@@ -150,6 +230,14 @@ export class ProjectileSystem {
         this.active.splice(i, 1)
       }
     }
+
+    // One matrix write per live projectile, one buffer upload for the lot.
+    for (const p of this.active) {
+      _mat4.compose(p.pos, _quat, _scaleV)
+      this.heads.setMatrixAt(p.index, _mat4)
+    }
+    this.heads.instanceMatrix.needsUpdate = true
+    this._writeTrailBuffer()
   }
 
   /**
@@ -240,14 +328,18 @@ export class ProjectileSystem {
   }
 
   _recycle(p) {
+    if (!p.alive) return
     p.alive = false
-    p.mesh.visible = false
-    p.trail.visible = false
+    p.trailCount = 0
+    this._hideInstance(p.index)
+    this.free.push(p.index)
   }
 
   clear() {
     for (const p of this.active) this._recycle(p)
     this.active.length = 0
+    this.heads.instanceMatrix.needsUpdate = true
+    this.trailGeo.setDrawRange(0, 0)
   }
 
   /**
@@ -278,7 +370,7 @@ export class ProjectileSystem {
   }
 
   /** Only warn about shots that have already bounced -- those are the surprise. */
-  ricochetThreatTo(pos, withinDist, selfId) {
+  ricochetThreatTo(pos, withinDist) {
     for (const p of this.active) {
       if (p.bounces === 0) continue
       _tmp.subVectors(pos, p.pos)

@@ -15,6 +15,7 @@ const _rel = new THREE.Vector3()
 const _perp = new THREE.Vector3()
 const _pdir = new THREE.Vector3()
 const _away = new THREE.Vector3()
+const _losBlockers = []
 const UP = new THREE.Vector3(0, 1, 0)
 
 export const AI = {
@@ -237,7 +238,13 @@ export class Enemy extends Bot {
 
     this.getMuzzleWorld(_muzzle)
     if (!segmentClear(_muzzle, target.pos, game.arena.debris)) return
-    if (!segmentClear(_muzzle, target.pos, game.bots.filter((b) => b.alive && b !== this && b !== target))) return
+    // Reuse one scratch array; this runs per bot per frame and the old
+    // `bots.filter(...)` allocated a fresh array every call.
+    _losBlockers.length = 0
+    for (const b of game.bots) {
+      if (b.alive && b !== this && b !== target) _losBlockers.push(b)
+    }
+    if (!segmentClear(_muzzle, target.pos, _losBlockers)) return
 
     // Lead the shot. If the target somehow outruns the projectile, aim direct.
     const t = interceptTime(_muzzle, target.pos, target.vel, CFG.proj.speed)

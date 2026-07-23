@@ -276,7 +276,8 @@ export class Bot {
     }
   }
 
-  orient(dt) {
+  /** Snap to the aim direction. Player overrides this to lag the body. */
+  orient() {
     orientToDirection(this.group, this.aimDir, 1)
   }
 

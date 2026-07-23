@@ -49,6 +49,8 @@ export async function loadAssets(onProgress) {
   template = gltf.scene
 
   if (CFG.debug) {
+    // Debug-gated: this is how you verify the shared-timeline retiming took.
+    // eslint-disable-next-line no-console
     for (const c of clips) console.log(`[clip] ${c.name} -> ${c.duration.toFixed(3)}s`)
   }
   return { clips }

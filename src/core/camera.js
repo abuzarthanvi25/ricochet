@@ -9,7 +9,6 @@ const _up = new THREE.Vector3()
 const _toCam = new THREE.Vector3()
 const _look = new THREE.Vector3()
 const _normal = new THREE.Vector3()
-const WORLD_UP = new THREE.Vector3(0, 1, 0)
 
 /**
  * Third-person chase rig. Owns the yaw/pitch the player steers with; the bot
@@ -51,7 +50,9 @@ export class CameraRig {
 
   _rebuildBasis() {
     const cp = Math.cos(this.pitch)
-    this.forward.set(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp).normalize()
+    this.forward
+      .set(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp)
+      .normalize()
     this.right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw))
   }
 

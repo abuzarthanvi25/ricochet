@@ -1,0 +1,12 @@
+# Line endings for this repository
+# See: https://help.github.com/en/articles/configuring-git-to-handle-line-endings
+# Keep in sync with .prettierrc (endOfLine: lf) and .editorconfig (end_of_line = lf)
+
+# Set the default behavior, in case people don't have core.autocrlf set.
+# Normalize all text files to LF in the repo and force LF on checkout (all platforms).
+* text=auto eol=lf
+
+# Declare files that will always have LF line endings on checkout.
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf

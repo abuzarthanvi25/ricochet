@@ -120,13 +120,10 @@ export function resolveSphere(pos, vel, radius, center, otherRadius, restitution
   const minDist = radius + otherRadius
   if (distSq >= minDist * minDist) return false
 
-  let dist = Math.sqrt(distSq)
-  if (dist < EPS) {
-    _push.set(0, 1, 0)
-    dist = 1
-  } else {
-    _push.multiplyScalar(1 / dist)
-  }
+  // Exactly concentric: pick an arbitrary axis so the push-out still resolves.
+  const dist = Math.sqrt(distSq)
+  if (dist < EPS) _push.set(0, 1, 0)
+  else _push.multiplyScalar(1 / dist)
 
   pos.copy(center).addScaledVector(_push, minDist)
   const inward = vel.dot(_push)

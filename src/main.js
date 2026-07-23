@@ -8,7 +8,13 @@ import './style.css'
 import { CFG } from './config.js'
 import { loadAssets, CLIP } from './core/assets.js'
 import {
-  initInput, consumeMouse, onLockChange, onLockError, requestLock, releaseLock, isLocked,
+  initInput,
+  consumeMouse,
+  onLockChange,
+  onLockError,
+  requestLock,
+  releaseLock,
+  isLocked,
 } from './core/input.js'
 import { Game, STATE } from './core/game.js'
 import { Hud } from './ui/hud.js'
@@ -90,6 +96,7 @@ initAudio()
 
 let game = null
 let pendingStart = false
+let perf = null
 
 overlays.bind({
   onPlay: () => beginMatch(true),
@@ -136,6 +143,43 @@ onLockError(() => {
   overlays.notice('Click the page first — the browser blocked mouse capture.')
 })
 
+/**
+ * stats-gl and lil-gui are debug-only, so they load on demand as a separate
+ * chunk rather than riding along in the main bundle for every player.
+ */
+async function enablePerf() {
+  if (perf) {
+    perf.setVisible(!perf.enabled)
+    return
+  }
+  const { Perf, stressTest } = await import('./dev/perf.js')
+  perf = new Perf(renderer, game)
+  await perf.mount()
+  window.RICOCHET.perf = perf
+  window.RICOCHET.stressTest = stressTest
+}
+
+/**
+ * renderer.compile() only walks *visible* objects, so the pooled projectile and
+ * explosion meshes -- which start hidden -- would otherwise compile on the
+ * first shot fired. Reveal them for the compile, then hide them again.
+ */
+async function warmUpShaders() {
+  const hidden = []
+  scene.traverse((o) => {
+    if ((o.isMesh || o.isLine || o.isPoints || o.isInstancedMesh) && !o.visible) {
+      hidden.push(o)
+      o.visible = true
+    }
+  })
+  try {
+    await renderer.compileAsync(scene, camera)
+  } catch {
+    renderer.compile(scene, camera)
+  }
+  for (const o of hidden) o.visible = false
+}
+
 async function boot() {
   try {
     await loadAssets()
@@ -155,6 +199,11 @@ async function boot() {
 
   game.viewport = { width: window.innerWidth, height: window.innerHeight }
 
+  // Compile every material up front, while the title screen is still up. The
+  // light count is now fixed, so whatever compiles here stays cached for the
+  // whole session instead of stalling a frame mid-fight.
+  await warmUpShaders()
+
   // Difficulty is live: changing it from the pause menu re-tunes the bots in
   // place, no restart needed.
   overlays.onDifficultyPick((id) => {
@@ -170,6 +219,8 @@ async function boot() {
 
   // Dev hook: drive the game from the console without pointer lock.
   window.RICOCHET = { game, scene, camera, renderer, composer, THREE, CFG, STATE, hud, overlays }
+
+  if (new URLSearchParams(location.search).has('perf')) await enablePerf()
 }
 
 // ------------------------------------------------------------------- loop
@@ -179,21 +230,32 @@ let last = performance.now()
 let fps = 60
 let debugOn = CFG.debug
 
-window.addEventListener('keydown', (e) => {
+window.addEventListener('keydown', async (e) => {
   if (e.code === 'F3') {
     e.preventDefault()
     debugOn = !debugOn
     if (!debugOn) hud.setDebug(null)
   }
+  if (e.code === 'F4' && game) {
+    e.preventDefault()
+    await enablePerf()
+  }
   // Clip inspector: with debug on, 1-5 force-play each animation solo. This is
   // the check that the shared-timeline retiming actually took -- every clip
   // must start moving immediately, with no dead pause at the front.
   if (debugOn && game && game.player.alive) {
-    const map = { Digit1: CLIP.IDLE, Digit2: CLIP.SHOOT, Digit3: CLIP.MOVE, Digit4: CLIP.HURT, Digit5: CLIP.DEATH }
+    const map = {
+      Digit1: CLIP.IDLE,
+      Digit2: CLIP.SHOOT,
+      Digit3: CLIP.MOVE,
+      Digit4: CLIP.HURT,
+      Digit5: CLIP.DEATH,
+    }
     const clip = map[e.code]
     if (clip) {
       game.player.override = null
       game.player.playOverride(clip)
+      // eslint-disable-next-line no-console -- clip inspector output is the point
       console.log(`[clip] ${clip} -> ${game.player.actions[clip].getClip().duration.toFixed(3)}s`)
     }
   }
@@ -201,12 +263,13 @@ window.addEventListener('keydown', (e) => {
 
 function frame(now) {
   requestAnimationFrame(frame)
+  if (perf) perf.begin()
 
   let dt = (now - last) / 1000
   last = now
   // Clamp so an alt-tab cannot hand us a one-second step.
   dt = Math.min(dt, 1 / 30)
-  fps += ((1 / Math.max(dt, 1e-4)) - fps) * 0.08
+  fps += (1 / Math.max(dt, 1e-4) - fps) * 0.08
 
   renderer.info.reset()
 
@@ -224,6 +287,7 @@ function frame(now) {
   }
 
   composer.render()
+  if (perf) perf.end()
 }
 
 boot()
