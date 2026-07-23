@@ -26,6 +26,22 @@ Formatting is Prettier's (no semicolons, single quotes, 100 cols); ESLint covers
 correctness only, with every stylistic rule disabled by `eslint-config-prettier`.
 Do not hand-format — run `npm run format`.
 
+## Branching
+
+`develop` is the integration branch. Branch from `develop` and target it with
+PRs — never commit straight to `main` or `develop`, and never open a PR against
+`main`. `main` only receives `release/*` and `hotfix/*` merges.
+
+```bash
+git checkout develop && git pull
+git checkout -b feat/thing
+gh pr create --base develop
+```
+
+Conventional-commit prefixes (`feat:` `fix:` `perf:` `docs:` `chore:`). Put
+before/after numbers in the body for anything behavioural, and update
+`CHANGELOG.md` under `[Unreleased]` for anything a player would notice.
+
 ## Architecture
 
 `src/config.js` holds **every** gameplay constant. Never hardcode a tunable in a

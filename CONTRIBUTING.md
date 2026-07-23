@@ -142,6 +142,28 @@ adding one is probably not worth it at this size.
 
 ---
 
+## Branching
+
+`develop` is the integration branch. **Branch from it, and target it with your
+PR** — `main` only ever receives merges from a `release/*` or `hotfix/*` branch,
+so it always reflects what has been released.
+
+```bash
+git checkout develop && git pull
+git checkout -b feat/thing        # feat/ fix/ perf/ docs/ refactor/ chore/
+# ...work...
+gh pr create --base develop
+```
+
+| Branch                      | Comes from | Merges into                    |
+| --------------------------- | ---------- | ------------------------------ |
+| `feat/*` `fix/*` `perf/*` … | `develop`  | `develop`                      |
+| `release/x.y.z`             | `develop`  | `main`, then back to `develop` |
+| `hotfix/x.y.z`              | `main`     | `main`, then back to `develop` |
+
+If you open a PR against `main` by mistake, retarget it rather than merging —
+`main` picking up work that never landed on `develop` is how the two drift apart.
+
 ## Commits and PRs
 
 Conventional-commit prefixes: `feat:`, `fix:`, `perf:`, `docs:`, `refactor:`,
