@@ -740,6 +740,48 @@ button:disabled {
   box-shadow: none;
 }
 
+/* ---- sound toggle ---- */
+
+.sound-row {
+  margin-bottom: 22px;
+}
+
+button.sound-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 20px;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  font-weight: 700;
+  color: rgba(223, 246, 255, 0.72);
+  background: transparent;
+  border: 1px solid rgba(223, 246, 255, 0.25);
+  box-shadow: none;
+}
+button.sound-btn:hover {
+  transform: none;
+  color: #dff6ff;
+  border-color: rgba(223, 246, 255, 0.55);
+  box-shadow: none;
+}
+
+button.sound-btn .sound-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+button.sound-btn.muted {
+  color: rgba(223, 246, 255, 0.38);
+  border-color: rgba(223, 246, 255, 0.15);
+}
+
 /* ---- powerup legend ---- */
 
 .powerup-guide {

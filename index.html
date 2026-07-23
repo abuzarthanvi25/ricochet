@@ -32,6 +32,14 @@
         <path d="M12 2c3.4 3 5 6.7 5 10.6L12 18l-5-5.4C7 8.7 8.6 5 12 2z" />
         <path d="M7.6 15 5 20l4.4-1.8M16.4 15l2.6 5-4.4-1.8" />
       </symbol>
+      <symbol id="gl-sound-on" viewBox="0 0 24 24">
+        <path d="M4 9.5h3.6L12.5 5v14L7.6 14.5H4z" />
+        <path d="M15.8 8.6a5 5 0 0 1 0 6.8M18.6 6a8.6 8.6 0 0 1 0 12" fill="none" />
+      </symbol>
+      <symbol id="gl-sound-off" viewBox="0 0 24 24">
+        <path d="M4 9.5h3.6L12.5 5v14L7.6 14.5H4z" />
+        <path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" />
+      </symbol>
     </svg>
 
     <!-- ===================== HUD ===================== -->
@@ -142,6 +150,8 @@
           <div class="diff-blurb"></div>
         </div>
 
+        <div class="sound-row" data-sound-group="title"></div>
+
         <button id="btn-play">CLICK TO ENGAGE</button>
         <p id="loading">loading assets…</p>
         <p class="credit">Model: <em>Shooter Bot</em> by Aurantiko — CC-BY-4.0</p>
@@ -182,6 +192,8 @@
           <div class="diff-blurb"></div>
           <div class="diff-note">Applies immediately — no need to restart.</div>
         </div>
+
+        <div class="sound-row" data-sound-group="paused"></div>
 
         <button id="btn-resume">RESUME</button>
       </section>

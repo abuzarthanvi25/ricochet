@@ -14,7 +14,6 @@ const _scaleV = new THREE.Vector3(1, 1, 1)
 const _quat = new THREE.Quaternion()
 const _quatR = new THREE.Quaternion()
 const _upY = new THREE.Vector3(0, 1, 0)
-const _hidden = new THREE.Vector3(0, -10000, 0)
 const _colFresh = new THREE.Color(CFG.proj.colorFresh)
 const _colArmed = new THREE.Color(CFG.proj.colorArmed)
 const _colHot = new THREE.Color(CFG.proj.colorFullyArmed)
@@ -42,7 +41,7 @@ export class ProjectileSystem {
 
     // --- heads: one instanced sphere for blasts, one instanced cone for
     //     rocketiles. Two draw calls total regardless of how many are in the
-    //     air, and the count never changes, so nothing recompiles mid-fight.
+    //     air, and both are skipped entirely when nothing of that kind is live.
     this.heads = this._makeInstanced(new THREE.SphereGeometry(CFG.proj.radius, 10, 8), N)
     this.rockets = this._makeInstanced(
       new THREE.ConeGeometry(CFG.proj.radius * 1.15, CFG.powerups.rocket.length, 6),
@@ -98,8 +97,6 @@ export class ProjectileSystem {
       })
       this.free.push(i)
     }
-
-    this._hideAllInstances()
   }
 
   /**
@@ -119,28 +116,13 @@ export class ProjectileSystem {
     )
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     mesh.frustumCulled = false
-    mesh.count = n
+    // Starts empty. `count` is the live projectile count, rewritten every frame
+    // in update(); see the note there.
+    mesh.count = 0
     // setColorAt allocates instanceColor on first use.
     mesh.setColorAt(0, _colFresh)
     mesh.instanceColor.setUsage(THREE.DynamicDrawUsage)
     return mesh
-  }
-
-  _hideAllInstances() {
-    for (let i = 0; i < this.pool.length; i++) this._hideInstance(i)
-    this.heads.instanceMatrix.needsUpdate = true
-    this.rockets.instanceMatrix.needsUpdate = true
-  }
-
-  /** Park a slot in both meshes, or in just the one the projectile is not using. */
-  _hideInstance(i, only = null) {
-    _mat4.compose(_hidden, _quat, _scaleV)
-    if (only !== this.rockets) this.heads.setMatrixAt(i, _mat4)
-    if (only !== this.heads) this.rockets.setMatrixAt(i, _mat4)
-  }
-
-  _meshFor(p) {
-    return p.kind === 'rocket' ? this.rockets : this.heads
   }
 
   spawn(
@@ -172,9 +154,6 @@ export class ProjectileSystem {
     p.bounces = 0
     p.trailCount = 0
 
-    // This slot renders in one mesh; keep it parked in the other.
-    this._hideInstance(idx, this._meshFor(p))
-
     this._applyHeat(p)
     this._pushTrail(p)
     this.active.push(p)
@@ -188,6 +167,9 @@ export class ProjectileSystem {
    *
    * Rocketiles get their own *fresh* colour but share the armed ramp -- "armed"
    * has to stay one colour language across every projectile type.
+   *
+   * Only computes `p.color`; the instance attribute is written in update(),
+   * because a projectile's render slot is not its pool slot.
    */
   _applyHeat(p) {
     if (p.bounces === 0) {
@@ -196,9 +178,6 @@ export class ProjectileSystem {
       const t = clamp((p.bounces - 1) / Math.max(1, CFG.proj.bouncesToFullHeat - 1), 0, 1)
       p.color.copy(_colArmed).lerp(_colHot, t)
     }
-    const mesh = this._meshFor(p)
-    mesh.setColorAt(p.index, p.color)
-    mesh.instanceColor.needsUpdate = true
   }
 
   /** Push the current position onto the head of the trail ring buffer. */
@@ -278,7 +257,27 @@ export class ProjectileSystem {
       }
     }
 
-    // One matrix write per live projectile, one buffer upload for the lot.
+    this._writeInstances()
+    this._writeTrailBuffer()
+  }
+
+  /**
+   * Pack the live projectiles into contiguous instance slots and set `count` to
+   * how many there are, so the GPU only ever draws what exists.
+   *
+   * The pool slot (`p.index`) is deliberately NOT the render slot. Parking dead
+   * slots off-screen instead -- the obvious approach -- still submits all 96
+   * instances of both meshes every frame: 96 x 140 + 96 x 12 = 14,592 triangles
+   * of nothing, which measured as 74% of the scene's entire triangle count with
+   * zero projectiles in the air.
+   *
+   * `count` is a draw-call argument, not part of the material's program key, so
+   * changing it per frame cannot trigger a shader recompile.
+   */
+  _writeInstances() {
+    let nHeads = 0
+    let nRockets = 0
+
     for (const p of this.active) {
       if (p.kind === 'rocket') {
         // Cones are authored pointing +Y; aim the nose down the velocity so a
@@ -286,15 +285,29 @@ export class ProjectileSystem {
         _dir.copy(p.vel).normalize()
         _quatR.setFromUnitVectors(_upY, _dir)
         _mat4.compose(p.pos, _quatR, _scaleV)
-        this.rockets.setMatrixAt(p.index, _mat4)
+        this.rockets.setMatrixAt(nRockets, _mat4)
+        this.rockets.setColorAt(nRockets, p.color)
+        nRockets++
       } else {
         _mat4.compose(p.pos, _quat, _scaleV)
-        this.heads.setMatrixAt(p.index, _mat4)
+        this.heads.setMatrixAt(nHeads, _mat4)
+        this.heads.setColorAt(nHeads, p.color)
+        nHeads++
       }
     }
-    this.heads.instanceMatrix.needsUpdate = true
-    this.rockets.instanceMatrix.needsUpdate = true
-    this._writeTrailBuffer()
+
+    this.heads.count = nHeads
+    this.rockets.count = nRockets
+
+    // Uploading is only worth it when something is actually drawn.
+    if (nHeads) {
+      this.heads.instanceMatrix.needsUpdate = true
+      this.heads.instanceColor.needsUpdate = true
+    }
+    if (nRockets) {
+      this.rockets.instanceMatrix.needsUpdate = true
+      this.rockets.instanceColor.needsUpdate = true
+    }
   }
 
   /**
@@ -467,15 +480,15 @@ export class ProjectileSystem {
     if (!p.alive) return
     p.alive = false
     p.trailCount = 0
-    this._hideInstance(p.index)
     this.free.push(p.index)
   }
 
   clear() {
     for (const p of this.active) this._recycle(p)
     this.active.length = 0
-    this.heads.instanceMatrix.needsUpdate = true
-    this.rockets.instanceMatrix.needsUpdate = true
+    // Nothing live means nothing drawn -- no need to park anything off-screen.
+    this.heads.count = 0
+    this.rockets.count = 0
     this.trailGeo.setDrawRange(0, 0)
   }
 

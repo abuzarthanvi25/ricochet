@@ -178,6 +178,13 @@ export const CFG = {
     bloomStrength: 0.85,
     bloomRadius: 0.5,
     bloomThreshold: 0.35,
+    // Bloom runs at half the canvas resolution. It is five separable blur mips
+    // over a full-screen buffer -- the single most expensive thing in the frame
+    // at 1:1 (measured 6.3ms of a ~22ms frame). The output is blurred by
+    // definition, so halving the internal buffer is very close to free
+    // visually: an interleaved A/B put it at -29% GPU time with no visible
+    // difference in the glow.
+    bloomScale: 0.5,
     trailLength: 14,
     lightIntensity: 14,
     lightDistance: 18,

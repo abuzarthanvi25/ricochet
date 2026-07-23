@@ -42,6 +42,7 @@ npm run dev      # http://localhost:5173
 | Mouse              | Aim                                                               |
 | Left mouse         | Fire                                                              |
 | `Esc`              | Release the pointer (pauses)                                      |
+| `M`                | Mute / unmute (also a button on the title and pause screens)      |
 | `F2`               | Powerup debug — with it on, `1`–`4` grant any powerup, `0` clears |
 | `F3`               | Debug overlay — with it on, `1`–`5` play each animation clip solo |
 | `F4`               | Performance overlay (also via `?perf` in the URL)                 |

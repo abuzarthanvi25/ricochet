@@ -19,7 +19,7 @@ import {
 import { Game, STATE } from './core/game.js'
 import { Hud } from './ui/hud.js'
 import { Overlays } from './ui/overlays.js'
-import { initAudio, resumeAudio } from './fx/audio.js'
+import { initAudio, resumeAudio, isMuted, setMuted } from './fx/audio.js'
 
 const canvas = document.getElementById('scene')
 
@@ -65,8 +65,9 @@ scene.add(rim)
 const composer = new EffectComposer(renderer)
 composer.addPass(new RenderPass(scene, camera))
 
+const BLOOM = CFG.fx.bloomScale
 const bloom = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  new THREE.Vector2(window.innerWidth * BLOOM, window.innerHeight * BLOOM),
   CFG.fx.bloomStrength,
   CFG.fx.bloomRadius,
   CFG.fx.bloomThreshold
@@ -81,7 +82,8 @@ function resize() {
   camera.updateProjectionMatrix()
   renderer.setSize(w, h)
   composer.setSize(w, h)
-  bloom.setSize(w, h)
+  // Bloom keeps its own reduced internal resolution -- see CFG.fx.bloomScale.
+  bloom.setSize(w * BLOOM, h * BLOOM)
   // Nameplates project into CSS pixels, so they need the logical size.
   if (game) game.viewport = { width: w, height: h }
 }
@@ -97,6 +99,14 @@ initAudio()
 let game = null
 let pendingStart = false
 let perf = null
+
+// Mute persists across sessions, so it is wired before the first screen shows.
+function applyMute(on) {
+  setMuted(on)
+  overlays.setMuted(isMuted())
+}
+overlays.onSoundToggle(() => applyMute(!isMuted()))
+applyMute(isMuted())
 
 overlays.bind({
   onPlay: () => beginMatch(true),
@@ -230,6 +240,10 @@ async function boot() {
     hud,
     overlays,
     powerups: game.powerups,
+    // Bound to THIS module's audio instance. A console `import()` of audio.js
+    // resolves to a separate Vite module copy with its own `muted` flag, so
+    // probing that one reports the wrong answer.
+    audio: { isMuted, setMuted: applyMute },
   }
 
   if (new URLSearchParams(location.search).has('perf')) await enablePerf()
@@ -255,6 +269,9 @@ const POWERUP_KEYS = {
 }
 
 window.addEventListener('keydown', async (e) => {
+  // M works mid-match too -- the overlays are only reachable once you have
+  // already released the pointer.
+  if (e.code === 'KeyM') applyMute(!isMuted())
   if (e.code === 'F3') {
     e.preventDefault()
     debugOn = !debugOn

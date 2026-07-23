@@ -3,6 +3,7 @@ import { POWERUPS } from '../core/powerups.js'
 
 const $ = (id) => document.getElementById(id)
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`
+const SVG_NS = 'http://www.w3.org/2000/svg'
 
 /**
  * One definition, rendered onto both the title screen and the pause menu. Two
@@ -42,10 +43,52 @@ export class Overlays {
     this.diffGroups = [...document.querySelectorAll('[data-difficulty-group]')]
     this.controlGroups = [...document.querySelectorAll('[data-controls-group]')]
     this.powerupGroups = [...document.querySelectorAll('[data-powerup-group]')]
+    this.soundGroups = [...document.querySelectorAll('[data-sound-group]')]
     this._onDifficultyPick = null
+    this._onSoundToggle = null
     this._buildDifficultyControls()
     this._buildControls()
     this._buildPowerupGuide()
+    this._buildSoundToggle()
+  }
+
+  /** Same toggle on the title screen and the pause menu. */
+  _buildSoundToggle() {
+    for (const group of this.soundGroups) {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'sound-btn'
+
+      const icon = document.createElementNS(SVG_NS, 'svg')
+      icon.setAttribute('class', 'sound-icon')
+      icon.setAttribute('viewBox', '0 0 24 24')
+      const use = document.createElementNS(SVG_NS, 'use')
+      use.setAttribute('href', '#gl-sound-on')
+      icon.appendChild(use)
+
+      const label = document.createElement('span')
+      label.textContent = 'SOUND'
+
+      btn.append(icon, label)
+      btn.addEventListener('click', (e) => {
+        e.currentTarget.blur()
+        this._onSoundToggle?.()
+      })
+      group.appendChild(btn)
+    }
+  }
+
+  onSoundToggle(fn) {
+    this._onSoundToggle = fn
+  }
+
+  setMuted(on) {
+    for (const group of this.soundGroups) {
+      const btn = group.querySelector('.sound-btn')
+      btn.classList.toggle('muted', on)
+      btn.querySelector('use').setAttribute('href', on ? '#gl-sound-off' : '#gl-sound-on')
+      btn.querySelector('span').textContent = on ? 'SOUND OFF' : 'SOUND ON'
+    }
   }
 
   /** Same key legend on the title screen and the pause menu. */
@@ -90,10 +133,10 @@ export class Overlays {
         row.className = 'pg-row'
         row.style.color = hex(p.color)
 
-        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        const icon = document.createElementNS(SVG_NS, 'svg')
         icon.setAttribute('class', 'pg-icon')
         icon.setAttribute('viewBox', '0 0 24 24')
-        const use = document.createElementNS('http://www.w3.org/2000/svg', 'use')
+        const use = document.createElementNS(SVG_NS, 'use')
         use.setAttribute('href', `#${p.glyph}`)
         icon.appendChild(use)
 

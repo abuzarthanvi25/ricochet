@@ -130,6 +130,14 @@ or a permaboosted bot over-leads every shot.
 `powerMul`) that multiply in `integrate()`. Collapsing them into one field means
 whichever effect landed last silently cancels the other.
 
+**Set `InstancedMesh.count` to what is actually live.** Parking dead instances
+off-screen still submits them: the projectile pools were drawing 14,592
+triangles of nothing every frame. `count` is a draw-call argument, not part of
+the program key, so writing it per frame is free. Debris instances have
+`frustumCulled = false` because three.js caches an `InstancedMesh` bounding
+sphere on first cull and never recomputes it — the instances drift, so a stale
+sphere makes them vanish.
+
 **Additive + `toneMapped: false` feeds bloom directly.** Opacities that look
 sane on paper blow out to solid white: the shield started at 0.1/0.45 and hid
 the bot entirely. Shield and pickup materials sit at 0.03–0.28 for that reason.
@@ -166,6 +174,13 @@ Two traps that will waste your time:
 - **Monkeypatches survive `game.reset()`.** Setting `e.canFire = () => false` on
   an enemy creates an own-property that `reset()` does not clear. Reload the page
   between scenarios, or results will silently be wrong.
+
+**GPU timing in a driven tab is noisy.** Wall-clock drifts several ms between
+runs, and `performance.now()` around `composer.render()` measures CPU submission,
+not GPU work. Use `EXT_disjoint_timer_query_webgl2`, issue the queries in one
+`evaluate` call and read them in the next (they need an event-loop turn to
+retire), and **interleave A/B frame-by-frame** so drift hits both arms equally.
+Absolute cross-run comparisons are not trustworthy here; interleaved deltas are.
 
 For perf work, watch `renderer.info.programs.length`. If it climbs during play,
 something is recompiling shaders — that is the top suspect for any stutter here.

@@ -61,6 +61,10 @@ Merged to `develop`, not yet released to `main`.
     below the fold on a 768p laptop. A `max-height: 860px` media query compacts
     it to 642px; `.screen` also gained `max-height: 100vh; overflow-y: auto` as a
     backstop for anything shorter still.
+- **Sound toggle** on the title screen and the pause menu, plus `M` in-game.
+  Persists to `localStorage`. Muting zeroes the master gain _and_ short-circuits
+  voice construction, so a muted fight stops allocating oscillator, gain and
+  filter nodes entirely rather than building and silencing them.
 - **Powerup debug mode (`F2`)** — grants any powerup on `1`–`4`, clears on `0`,
   so a powerup can be tested without waiting for one of the four a match gets.
   Grants bypass the match budget entirely and re-pressing a key refreshes the
@@ -129,7 +133,57 @@ Merged to `develop`, not yet released to `main`.
   and the explosion light-collection closure.
 - Camera pulled back from 4.6 to 6.2 units for better visibility.
 
-### Performance
+### Performance — second pass
+
+The first pass fixed CPU-side stalls. This one profiled the GPU with
+`EXT_disjoint_timer_query_webgl2` and found the frame was **entirely GPU-bound**:
+game logic totalled 0.82ms/frame against ~7ms of GPU time, so nothing in
+`update()` was worth touching.
+
+Wall-clock GPU numbers drift several ms between runs on this machine, so every
+change below was measured by **interleaving A and B frame-by-frame inside one
+run** — drift then hits both arms equally. Medians and means agree to ~0.01ms.
+
+| Change                                  | GPU delta   |
+| --------------------------------------- | ----------- |
+| Bloom at half internal resolution       | **−6.34ms** |
+| Arena + debris `MeshStandard`→`Lambert` | **−2.21ms** |
+| Projectile instance compaction          | **−0.84ms** |
+| Debris instancing (25 draws → 7)        | −0.36ms     |
+
+- **Instanced pools were drawing at full size every frame.** `InstancedMesh.count`
+  stayed at the pool capacity and dead slots were parked off-screen, so 96 heads
+  and 96 cones — 14,592 triangles — were submitted with zero projectiles in the
+  air. That was **74% of the scene's entire triangle count** while idle. Live
+  projectiles now pack into contiguous instance slots and `count` is set to how
+  many exist. `count` is a draw-call argument, not part of the program key, so
+  changing it per frame cannot trigger a recompile.
+  - Idle triangles **19,766 → 5,054**.
+  - The render slot is deliberately no longer the pool slot, so instance colour
+    moved from `_applyHeat` into the per-frame write.
+- **Bloom ran at full canvas resolution** — five separable blur mips over a
+  full-screen buffer, the single most expensive item in the frame. Its output is
+  blurred by definition, so half-res is visually near-free.
+- **The walls are the most overdrawn surface in the game** — a `BackSide` box the
+  camera sits inside, covering essentially every pixel. At roughness 0.85 /
+  metalness 0.15 the PBR BRDF bought almost nothing over plain diffuse. They
+  still light up from passing projectiles.
+- **Debris are one `InstancedMesh` per shape** instead of 25 separate meshes.
+  They already shared one material, so the split bought nothing but draw calls.
+  Frustum culling is disabled on them deliberately: three.js caches an
+  `InstancedMesh` bounding sphere on first cull and never recomputes it, and
+  these instances drift every frame — a stale sphere would pop debris out of
+  existence.
+
+**Rejected:** converting the bot material to Lambert measured only −0.45ms. The
+bots' cost is vertex/skinning, not shading, and that is not worth changing how
+the hero asset looks.
+
+Recompiles across idle → 60 projectiles → 90 rocketiles → idle: **0**.
+
+---
+
+### Performance — first pass
 
 Held load, update and render timed separately:
 
