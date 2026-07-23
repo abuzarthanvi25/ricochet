@@ -173,6 +173,36 @@ export const sfx = {
     tone({ type: 'sawtooth', from: 140, to: 620, attack: 0.02, decay: 0.22, peak: 0.22 })
   },
 
+  /** Shot deflected by a shield. Deliberately metallic and unlike a wall bounce. */
+  shieldHit(dist = 0) {
+    const g = gainFor(dist, 55)
+    if (g <= 0.02) return
+    if (!takeVoice('shield', 3)) return
+    tone({ type: 'sine', from: 1500, to: 900, attack: 0.002, decay: 0.14, peak: 0.26 * g })
+    tone({ type: 'triangle', from: 2300, to: 1700, attack: 0.002, decay: 0.09, peak: 0.14 * g })
+  },
+
+  powerUp() {
+    ;[660, 880, 1320].forEach((f, i) => {
+      setTimeout(
+        () =>
+          tone({ type: 'square', from: f, to: f * 1.02, attack: 0.008, decay: 0.16, peak: 0.2 }),
+        i * 70
+      )
+    })
+  },
+
+  /** A bot took one. Quieter and lower -- you should notice, not celebrate. */
+  powerUpRemote(dist = 0) {
+    const g = gainFor(dist, 70)
+    if (g <= 0.02) return
+    tone({ type: 'triangle', from: 440, to: 660, attack: 0.01, decay: 0.22, peak: 0.16 * g })
+  },
+
+  powerDown() {
+    tone({ type: 'square', from: 880, to: 300, attack: 0.006, decay: 0.28, peak: 0.18 })
+  },
+
   warn() {
     tone({ type: 'triangle', from: 1200, to: 1200, attack: 0.01, decay: 0.09, peak: 0.16 })
   },

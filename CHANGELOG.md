@@ -9,10 +9,33 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Currently on the `perf/optimization` branch, not yet merged to `main`.
+Merged to `develop`, not yet released to `main`.
 
 ### Added
 
+- **Powerups** — four of them, and **only four spawn in an entire match**. One of
+  each type, in a shuffled order, first at 12s then every 22s. Everybody
+  contests them: the player and all four bots. One slot each, no swapping — you
+  fly straight through a pickup while you are already holding something.
+  Everything expires on the same 8s clock, shown as a circular glyph with a
+  draining progress ring that pulses over the last two seconds.
+  - **SHIELD** — a bubble at 2.4 units. Shots reflect off it instead of hitting
+    you, and a reflection is a bounce in every sense, so the shot comes off
+    **armed against whoever fired it**. It is a convex mirror, not a retro
+    reflector: an off-centre hit scatters, so the shield reliably saves you but
+    only sometimes kills the shooter. You can still fire out through your own
+    bubble — the arming rule gates the shield exactly as it gates damage.
+  - **PERMABOOST** — dash with no cooldown. Still edge-triggered, so holding `Q`
+    does not chain-dash. Bots get the equivalent: their evade has no cooldown, so
+    they break away from every incoming shot instead of one every ~0.9s.
+  - **FROSTILES** — direct hits drop the target to 0.4× thrust and speed for
+    2.5s and tint it frost-blue. Your own returning ricochet freezes you too.
+  - **ROCKETILES** — magenta cones that fly straight for 0.35s, then hunt the
+    nearest entity within 22 units at 3.2 rad/s. Target selection runs the same
+    arming predicate as damage, so a bounced rocketile will come around and hunt
+    the player who fired it.
+  - Bots break off to contest a pickup within 22 units (`AI.COLLECT`), and their
+    nameplate shows what they are holding. A bot's powerup is lost on death.
 - **Difficulty presets** — RECRUIT / SOLDIER / VETERAN, selectable from both the
   title screen and the pause menu. Applied live without restarting a match and
   persisted to `localStorage`. Default is SOLDIER.
@@ -93,6 +116,27 @@ Gameplay verified unchanged: full-match soaks land at 15–10 stationary and 15�
 dodging on SOLDIER, with no projectile escapes, no NaN, and exact pool
 accounting.
 
+Powerups added no measurable cost. Same 15s soak with a shot fired every frame,
+budget 4 vs budget 0: frame p50 9.9ms vs 9.4ms, p99 27.0ms vs 27.9ms — inside
+run-to-run noise. **Shader recompiles across a 200s match with every powerup in
+play: 0** (programs held at 29). Two new constant draw calls: one `InstancedMesh`
+for rocketile cones, and up to one per visible pickup.
+
+`powerups.seekRadius` was tuned by measurement, not feel. Over 4-minute matches
+against a player beelining for every pickup with perfect knowledge:
+
+| `seekRadius` | pickups the player won |
+| ------------ | ---------------------- |
+| 30           | 5 / 16                 |
+| 22           | 12 / 16                |
+| 14           | 13 / 16                |
+| 10           | 16 / 16                |
+
+At 30 the bots took nearly everything even against a perfect player, and an
+ordinary player who has to _spot_ a pickup first got none at all. Shipped at 22,
+which also sits exactly on `arena.findSpawn`'s 22-unit bot clearance — a pickup
+always lands just outside the nearest bot's awareness, so somebody has to commit.
+
 ---
 
 ## [0.1.0] — 2026-07-23
@@ -145,5 +189,5 @@ Three asset quirks handled at load, documented in `core/assets.js`:
 
 Model: **Shooter Bot** by Aurantiko, CC-BY-4.0, via Sketchfab.
 
-[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/main...perf/optimization
+[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/main...develop
 [0.1.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.1.0

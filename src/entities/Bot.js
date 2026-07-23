@@ -8,6 +8,13 @@ let nextId = 1
 
 const _muzzle = new THREE.Vector3()
 const _white = new THREE.Color(0xffffff)
+const _frost = new THREE.Color(CFG.powerups.frost.tint)
+
+// Shared by every bot's shield -- geometry is identical, only the tint differs.
+// Built lazily on first construction rather than at module load so the headless
+// tests can import Bot's siblings without a WebGL context in the way.
+let _shieldGeo = null
+let _shieldWireGeo = null
 
 /**
  * Shared bot: model + animation state machine + zero-g movement + damage.
@@ -39,9 +46,21 @@ export class Bot {
     this.fireCd = 0
     this.flashTimer = 0
 
+    // Powerups. One slot, no swapping -- see equip().
+    this.powerup = null
+    this.powerupTimer = 0
+    // A plain number rather than a method: weapons/projectiles.js reads it in
+    // the sweep, and keeping it a field lets the headless tests use plain
+    // object mocks with no extra stubbing.
+    this.shieldRadius = 0
+    this.speedMul = 1
+    this.slowTimer = 0
+    this._tint = null
+
     this.group = new THREE.Group()
     this.built = createBotModel(color, bodyTint)
     this.group.add(this.built.model)
+    this._buildShield(color)
     scene.add(this.group)
 
     this.mixer = new THREE.AnimationMixer(this.built.model)
@@ -60,6 +79,119 @@ export class Bot {
     this.override = null
   }
 
+  /**
+   * Two-layer bubble: a faint solid shell plus a geodesic wireframe. Built once
+   * here and only ever toggled with `visible` -- adding a mesh (or worse, a
+   * light) mid-fight would change shader program keys and stall a frame.
+   * `main.js` warms these up while the title screen is still on.
+   */
+  _buildShield(teamColor) {
+    const r = CFG.powerups.shield.radius
+    if (!_shieldGeo) _shieldGeo = new THREE.IcosahedronGeometry(r, 2)
+    // Detail 1 on purpose: a coarse cage reads as a shield, while a fine mesh
+    // just becomes a solid ball once bloom gets hold of it.
+    if (!_shieldWireGeo) _shieldWireGeo = new THREE.IcosahedronGeometry(r, 1)
+
+    this.shield = new THREE.Group()
+    this.shield.visible = false
+
+    const common = {
+      color: teamColor,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+      // The player's own camera sits close enough to end up inside the bubble.
+      side: THREE.DoubleSide,
+    }
+    // These opacities look absurdly low written down. They are not: additive
+    // blending skips tone mapping and then feeds UnrealBloomPass, which is well
+    // over threshold at 0.35 -- at 0.1/0.45 the bubble blew out to an opaque
+    // white ball that hid the bot inside it entirely.
+    this.shieldMat = new THREE.MeshBasicMaterial({ ...common, opacity: 0.03 })
+    this.shieldWireMat = new THREE.MeshBasicMaterial({
+      ...common,
+      opacity: 0.13,
+      wireframe: true,
+    })
+
+    this.shield.add(new THREE.Mesh(_shieldGeo, this.shieldMat))
+    this.shield.add(new THREE.Mesh(_shieldWireGeo, this.shieldWireMat))
+    this.group.add(this.shield)
+  }
+
+  // --------------------------------------------------------------- powerups
+
+  /**
+   * One slot, no swapping: PowerupSystem refuses to hand one over while
+   * `this.powerup` is set, so this only ever fills an empty slot.
+   */
+  equip(id) {
+    this.powerup = id
+    this.powerupTimer = CFG.powerups.duration
+    this._applyPowerupState()
+  }
+
+  clearPowerup() {
+    this.powerup = null
+    this.powerupTimer = 0
+    this._applyPowerupState()
+  }
+
+  /** Fraction of the powerup's life left, for the HUD ring. */
+  powerup01() {
+    return this.powerup ? clamp(this.powerupTimer / CFG.powerups.duration, 0, 1) : 0
+  }
+
+  _applyPowerupState() {
+    const shielded = this.powerup === 'shield'
+    this.shieldRadius = shielded ? CFG.powerups.shield.radius : 0
+    if (this.shield) this.shield.visible = shielded
+  }
+
+  _updatePowerup(dt) {
+    if (!this.powerup) return
+
+    this.powerupTimer -= dt
+    if (this.powerupTimer <= 0) {
+      this.clearPowerup()
+      this.onPowerupEnd?.()
+      return
+    }
+
+    if (this.shieldRadius > 0) {
+      // Flickers out over the last second so its end is never a surprise.
+      const fade = clamp(this.powerupTimer / 1.0, 0, 1)
+      const pulse = 0.5 + 0.5 * Math.sin(this.powerupTimer * 9)
+      this.shieldMat.opacity = (0.02 + 0.025 * pulse) * fade
+      this.shieldWireMat.opacity = (0.09 + 0.08 * pulse) * fade
+    }
+  }
+
+  /** Frostile hit. Strongest slow and longest timer win, so stacking cannot shorten one. */
+  applySlow(duration, mul) {
+    this.slowTimer = Math.max(this.slowTimer, duration)
+    this.speedMul = Math.min(this.speedMul, mul)
+  }
+
+  _updateSlow(dt) {
+    if (this.slowTimer <= 0) return
+    this.slowTimer -= dt
+    if (this.slowTimer <= 0) {
+      this.slowTimer = 0
+      this.speedMul = 1
+    }
+  }
+
+  /** What this bot's shots currently are. Read by Game.spawnProjectile. */
+  projKind() {
+    return this.powerup === 'rocketiles' ? 'rocket' : 'blast'
+  }
+
+  projMod() {
+    return this.powerup === 'frostiles' ? 'frost' : null
+  }
+
   // ------------------------------------------------------------------ spawn
 
   spawnAt(pos) {
@@ -72,6 +204,10 @@ export class Bot {
     this.deathTimer = 0
     this.fireCd = 0
     this.flashTimer = 0
+    this.slowTimer = 0
+    this.speedMul = 1
+    this._tint = null
+    this.clearPowerup()
 
     if (this.override) {
       this.override.action.stop()
@@ -140,13 +276,16 @@ export class Bot {
 
   integrate(dt, arena, others) {
     if (this.wish.lengthSq() > 1e-6) {
-      this.vel.addScaledVector(this.wish, this.accel * dt)
+      // Frostile slow scales thrust and the cap, never maxSpeed/accel
+      // themselves -- Enemy.applyDifficulty() rewrites those, so a slow stored
+      // there would silently vanish on a mid-match difficulty change.
+      this.vel.addScaledVector(this.wish, this.accel * this.speedMul * dt)
     }
 
     // Frame-rate independent drag. Never `vel *= 0.92` per frame.
     this.vel.multiplyScalar(Math.pow(this.drag, dt))
 
-    const cap = this.maxSpeed * (this.overspeed > 0 ? 2.2 : 1)
+    const cap = this.maxSpeed * this.speedMul * (this.overspeed > 0 ? 2.2 : 1)
     const sp = this.vel.length()
     if (sp > cap) this.vel.multiplyScalar(cap / sp)
 
@@ -204,6 +343,9 @@ export class Bot {
     this.alive = false
     this.dying = true
     this.deathTimer = 0
+    // You lose whatever you were holding. A scarce powerup that survived death
+    // would make the holder strictly better off for dying.
+    this.clearPowerup()
     this.playOverride(CLIP.DEATH)
     this.deathSpin = new THREE.Vector3(
       (Math.random() - 0.5) * 1.6,
@@ -218,6 +360,7 @@ export class Bot {
   update(dt, game) {
     if (this.fireCd > 0) this.fireCd -= dt
     if (this.overspeed > 0) this.overspeed -= dt
+    this._updateSlow(dt)
 
     if (this.dying) {
       this._updateDeath(dt, game)
@@ -225,12 +368,13 @@ export class Bot {
     }
     if (!this.alive) return
 
+    this._updatePowerup(dt)
     this.think(dt, game)
     this.integrate(dt, game.arena, game.bots)
     this.group.position.copy(this.pos)
     this.orient(dt)
     this._updateAnimation(dt)
-    this._updateFlash(dt)
+    this._updateTint(dt)
   }
 
   _updateDeath(dt, game) {
@@ -245,7 +389,7 @@ export class Bot {
     this.group.rotateZ(this.deathSpin.z * dt)
 
     this._updateAnimation(dt)
-    this._updateFlash(dt)
+    this._updateTint(dt)
 
     const fadeStart = CFG.bot.deathSinkTime * 0.45
     if (this.deathTimer > fadeStart) {
@@ -260,19 +404,31 @@ export class Bot {
     }
   }
 
-  _updateFlash(dt) {
-    if (this.flashTimer <= 0) return
-    this.flashTimer -= dt
-    const k = clamp(this.flashTimer / CFG.bot.hurtFlashTime, 0, 1)
-    for (const m of this.built.materials) {
-      m.emissive.copy(this.built.baseTint).lerp(_white, k)
-      m.emissiveIntensity = 1.35 + k * 2.5
-    }
-    if (this.flashTimer <= 0) {
+  /**
+   * Hurt flash on top of a resting tint that goes frost-blue while slowed.
+   * Writing `emissive` is a uniform update and safe every frame; adding a
+   * define or toggling `transparent` here would recompile the material.
+   */
+  _updateTint(dt) {
+    const resting = this.slowTimer > 0 ? _frost : this.built.baseTint
+
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt
+      const k = clamp(this.flashTimer / CFG.bot.hurtFlashTime, 0, 1)
       for (const m of this.built.materials) {
-        m.emissive.copy(this.built.baseTint)
-        m.emissiveIntensity = 1.35
+        m.emissive.copy(resting).lerp(_white, k)
+        m.emissiveIntensity = 1.35 + k * 2.5
       }
+      if (this.flashTimer <= 0) this.flashTimer = 0
+      this._tint = null // force a rewrite on the frame the flash ends
+      return
+    }
+
+    if (this._tint === resting) return
+    this._tint = resting
+    for (const m of this.built.materials) {
+      m.emissive.copy(resting)
+      m.emissiveIntensity = 1.35
     }
   }
 
@@ -287,5 +443,7 @@ export class Bot {
   dispose() {
     this.scene.remove(this.group)
     for (const m of this.built.materials) m.dispose()
+    this.shieldMat?.dispose()
+    this.shieldWireMat?.dispose()
   }
 }

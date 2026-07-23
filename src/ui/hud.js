@@ -1,8 +1,12 @@
 import { clamp } from '../core/util.js'
+import { POWERUPS } from '../core/powerups.js'
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 26 // matches r=26 in index.html
+const PU_CIRCUMFERENCE = 2 * Math.PI * 42 // matches r=42 in index.html
 
 const $ = (id) => document.getElementById(id)
+const hex = (n) => `#${n.toString(16).padStart(6, '0')}`
+const teamClass = (team) => (team === 'player' ? 'you' : team === 'powerup' ? 'pu' : 'bot')
 
 export class Hud {
   constructor() {
@@ -20,7 +24,15 @@ export class Hud {
     this.warn = $('warn-inbound')
     this.debugEl = $('debug')
 
+    this.powerupEl = $('powerup')
+    this.powerupRing = $('powerup-ring')
+    this.powerupGlyph = $('powerup-glyph')
+    this.powerupLabel = $('powerup-label')
+    this.toastEl = $('powerup-toast')
+
     this.ring.style.strokeDasharray = RING_CIRCUMFERENCE
+    this.powerupRing.style.strokeDasharray = PU_CIRCUMFERENCE
+    this._puId = null
     this._vignetteLevel = 0
     this._hitTimer = null
   }
@@ -55,6 +67,48 @@ export class Hud {
     this.boostFill.classList.toggle('charging', r < 1)
   }
 
+  /**
+   * Equipped powerup: circular glyph with a circular progress ring around it,
+   * the same stroke-dashoffset technique as the crosshair cooldown. `k` is the
+   * fraction of life left, so the ring drains as the powerup runs out.
+   */
+  setPowerup(id, k) {
+    if (!id) {
+      if (this._puId !== null) {
+        this._puId = null
+        this.powerupEl.classList.add('hidden')
+      }
+      return
+    }
+
+    if (id !== this._puId) {
+      this._puId = id
+      const preset = POWERUPS[id]
+      this.powerupEl.style.color = hex(preset.color)
+      this.powerupGlyph.setAttribute('href', `#${preset.glyph}`)
+      this.powerupLabel.textContent = preset.label
+      this.powerupEl.classList.remove('hidden')
+    }
+
+    const r = clamp(k, 0, 1)
+    this.powerupRing.style.strokeDashoffset = PU_CIRCUMFERENCE * (1 - r)
+    this.powerupEl.classList.toggle('expiring', r <= 0.25)
+  }
+
+  /** One-shot banner naming what you just picked up and what it does. */
+  announcePowerup(preset) {
+    const el = this.toastEl
+    el.style.color = hex(preset.color)
+    el.querySelector('.pt-label').textContent = preset.label
+    el.querySelector('.pt-blurb').textContent = preset.blurb
+    el.classList.remove('hidden')
+    el.style.animation = 'none'
+    void el.offsetWidth // restart the CSS animation
+    el.style.animation = ''
+    clearTimeout(this._toastTimer)
+    this._toastTimer = setTimeout(() => el.classList.add('hidden'), 2400)
+  }
+
   setScore(you, them, target) {
     this.scoreYou.textContent = you
     this.scoreThem.textContent = them
@@ -84,8 +138,8 @@ export class Hud {
   addKill({ killer, killerTeam, victim, victimTeam, verb }) {
     const line = document.createElement('div')
     line.className = 'line'
-    const kc = killerTeam === 'player' ? 'you' : 'bot'
-    const vc = victimTeam === 'player' ? 'you' : 'bot'
+    const kc = teamClass(killerTeam)
+    const vc = teamClass(victimTeam)
     line.innerHTML = killer
       ? `<span class="who ${kc}">${killer}</span><span class="verb">${verb}</span><span class="who ${vc}">${victim}</span>`
       : `<span class="who ${vc}">${victim}</span><span class="verb">${verb}</span>`

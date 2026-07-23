@@ -2,6 +2,10 @@ import * as THREE from 'three'
 import { CFG } from '../config.js'
 import { clamp } from '../core/util.js'
 import { segmentClear } from '../core/collision.js'
+import { POWERUPS } from '../core/powerups.js'
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const hex = (n) => `#${n.toString(16).padStart(6, '0')}`
 
 const _world = new THREE.Vector3()
 const _proj = new THREE.Vector3()
@@ -34,11 +38,34 @@ export class Nameplates {
     fill.className = 'np-fill'
     bar.appendChild(fill)
 
+    // Powerup badge. Reuses the same <symbol> glyphs as the HUD widget, so a
+    // shielded bot is recognisable before you waste a shot on the bubble.
+    const badge = document.createElementNS(SVG_NS, 'svg')
+    badge.setAttribute('class', 'np-badge')
+    badge.setAttribute('viewBox', '0 0 24 24')
+    badge.style.display = 'none'
+    const use = document.createElementNS(SVG_NS, 'use')
+    badge.appendChild(use)
+
     root.appendChild(name)
     root.appendChild(bar)
+    root.appendChild(badge)
     this.container.appendChild(root)
 
-    this.plates.set(bot.id, { root, fill, bot, shown: false })
+    this.plates.set(bot.id, { root, fill, badge, use, bot, shown: false, powerup: null })
+  }
+
+  _setBadge(plate, id) {
+    if (plate.powerup === id) return
+    plate.powerup = id
+    if (!id) {
+      plate.badge.style.display = 'none'
+      return
+    }
+    const preset = POWERUPS[id]
+    plate.use.setAttribute('href', `#${preset.glyph}`)
+    plate.badge.style.color = hex(preset.color)
+    plate.badge.style.display = 'block'
   }
 
   update(camera, bots, arena, viewport) {
@@ -87,6 +114,7 @@ export class Nameplates {
       plate.fill.style.transform = `scaleX(${hp01})`
       plate.fill.classList.toggle('low', hp01 <= 0.5 && hp01 > 0.25)
       plate.fill.classList.toggle('critical', hp01 <= 0.25)
+      this._setBadge(plate, bot.powerup)
 
       if (!plate.shown) {
         plate.root.style.display = 'block'

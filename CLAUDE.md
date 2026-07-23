@@ -56,6 +56,7 @@ core/
   camera.js    chase rig, occlusion, crosshair aim ray
   arena.js     wall box + drifting debris
   difficulty.js presets + localStorage
+  powerups.js  registry + the pickups floating in the arena
 entities/      Bot (shared base) -> Player, Enemy
 weapons/projectiles.js   stepping, bouncing, arming — the core mechanic
 fx/            explosions, shared light pool, synthesised audio
@@ -104,6 +105,22 @@ opposite. Use `orientToDirection()` from `core/util.js`. The model itself faces
 
 **Bots clamp, projectiles bounce.** Bouncing the thing the player steers feels
 like losing control; bots only get inward velocity cancelled.
+
+**Rocketile homing runs once per frame, BEFORE the sweep — never inside it.**
+That is the entire reason the analytic guarantee survives a guided projectile:
+within any one frame the path is still a straight segment. `npm test` fires 200
+homing rocketiles at 400 u/s with the seeker pulling hard and asserts none
+escape. If you move the steering into the bounce loop, that test is what catches
+it.
+
+**The shield only reflects from outside.** `raySphere` returns the _exit_ point
+when the origin is inside a sphere, so reflecting there on an outward normal
+fires the shot back in and traps it forever. A projectile caught inside a bubble
+must fall through to the body — `weapons/projectiles.js` guards this explicitly.
+
+**Additive + `toneMapped: false` feeds bloom directly.** Opacities that look
+sane on paper blow out to solid white: the shield started at 0.1/0.45 and hid
+the bot entirely. Shield and pickup materials sit at 0.03–0.28 for that reason.
 
 ## Conventions
 

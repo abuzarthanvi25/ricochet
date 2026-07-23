@@ -218,7 +218,19 @@ async function boot() {
   overlays.showTitle()
 
   // Dev hook: drive the game from the console without pointer lock.
-  window.RICOCHET = { game, scene, camera, renderer, composer, THREE, CFG, STATE, hud, overlays }
+  window.RICOCHET = {
+    game,
+    scene,
+    camera,
+    renderer,
+    composer,
+    THREE,
+    CFG,
+    STATE,
+    hud,
+    overlays,
+    powerups: game.powerups,
+  }
 
   if (new URLSearchParams(location.search).has('perf')) await enablePerf()
 }

@@ -45,11 +45,16 @@ export class Player extends Bot {
     if (isDown('ShiftLeft') || isDown('ShiftRight')) w.y -= 1
     if (w.lengthSq() > 1e-6) w.normalize()
 
-    if (this.boostCd > 0) this.boostCd -= dt
+    // Permaboost zeroes the cooldown rather than removing the edge trigger --
+    // holding Q must still not chain-dash. See the note in core/input.js.
+    const permaboost = this.powerup === 'permaboost'
+    if (permaboost) this.boostCd = 0
+    else if (this.boostCd > 0) this.boostCd -= dt
+
     if (consumeBoost() && this.boostCd <= 0) {
       _dir.copy(w.lengthSq() > 1e-6 ? w : rig.forward)
       this.vel.addScaledVector(_dir, CFG.player.boostImpulse)
-      this.boostCd = CFG.player.boostCooldown
+      if (!permaboost) this.boostCd = CFG.player.boostCooldown
       this.overspeed = 0.9
       game.onPlayerBoost()
     }

@@ -91,6 +91,28 @@ Deathmatch to **15** against **4** bots that respawn 3s after death.
 | Your own ricochet kills you | You −1 (floor 0)                         |
 | A bot kills another bot     | No score — but it shows in the kill feed |
 
+## Powerups
+
+**Four spawn in an entire match.** Not four at a time — four, total, one of each
+type in a shuffled order. Everyone contests them: you and all four bots. One
+slot each and no swapping, so while you are holding something you fly straight
+through pickups and leave them for somebody else. Everything expires on the same
+8-second clock, shown bottom-left as a glyph inside a draining ring.
+
+| Powerup        | Effect                                                    | What the ricochet rule does to it                                                     |
+| -------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **SHIELD**     | 2.4-unit bubble; shots reflect off you instead of hitting | A reflection is a bounce — the shot comes off **armed against the bot that fired it** |
+| **PERMABOOST** | Dash with no cooldown                                     | Bots get the same deal: their evade stops having a cooldown                           |
+| **FROSTILES**  | Direct hits drop the target to 0.4× speed for 2.5s        | Your own returning ricochet freezes **you**                                           |
+| **ROCKETILES** | Magenta cones that hunt the nearest bot within 22 units   | Once bounced, the nearest bot might be you                                            |
+
+The shield is a convex mirror, not a retro-reflector — an off-centre hit
+scatters. It saves you reliably; it kills the shooter only when they hit you
+square on.
+
+Bots break off to grab a pickup within 22 units and their nameplate shows what
+they are carrying. Die and you drop it.
+
 ## Difficulty
 
 Selectable from the title screen **and** the pause menu, applied live without a
@@ -133,10 +155,11 @@ src/
     camera.js      third-person rig, occlusion, aim ray
     assets.js      GLB load, clip retiming, per-bot model factory
     difficulty.js  presets and persistence
+    powerups.js    registry + the pickups floating in the arena
     input.js       pointer lock, keys, mouse deltas
     util.js        math helpers
   entities/        Bot (shared) -> Player, Enemy
-  weapons/         projectiles.js — stepping, bouncing, arming
+  weapons/         projectiles.js — stepping, bouncing, arming, homing
   fx/              explosions, shared light pool, synthesised audio
   ui/              hud, overlays, world-space nameplates
   dev/perf.js      stats-gl + lil-gui, lazy-loaded
@@ -163,6 +186,12 @@ body, so each instance is re-centred at load.
 **Collision is fully analytic** — exact per-axis solves against the arena box,
 ray/sphere for debris and bots. There is no substepping, so projectile speed
 cannot cause tunnelling. `npm test` fires 200 shots at 400 u/s to prove it.
+
+**Rocketile homing steers once per frame, before the sweep.** That is what lets
+a guided projectile keep the analytic guarantee: within any single frame its
+path is still a straight segment. Move the steering into the bounce loop and it
+will tunnel — `npm test` fires 200 homing rocketiles at 400 u/s for exactly this
+reason.
 
 **Bots clamp, projectiles bounce.** Bouncing the thing you are steering feels
 like losing control, so bots only have their inward velocity cancelled.

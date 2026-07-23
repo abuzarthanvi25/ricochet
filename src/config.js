@@ -82,6 +82,57 @@ export const CFG = {
     bouncesToFullHeat: 4,
   },
 
+  powerups: {
+    // Every type expires on the same clock -- one timer to read, one ring on
+    // the HUD, no per-type mental math mid-fight.
+    duration: 8.0,
+    // Hard budget for a WHOLE match, not a concurrent cap. Once the fourth has
+    // been taken nobody gets another, which is what makes contesting one worth
+    // breaking off a fight for.
+    budgetPerMatch: 4,
+    firstSpawnDelay: 12,
+    spawnInterval: 22,
+    pickupRadius: 1.6,
+    bobAmp: 0.35,
+    bobRate: 1.4,
+    spinRate: 0.8,
+    // How far a bot will break off to go and grab one. Measured over 4-minute
+    // matches against a player beelining for every pickup: at 30 the bots took
+    // 11 of 16 even then, and a real player who has to *spot* one first got
+    // none at all. At 22 the player wins 12/16 with perfect play, which leaves
+    // a real, distracted player one or two a match. It also sits right on
+    // arena.findSpawn's 22-unit bot clearance, so a pickup always lands just
+    // outside the nearest bot's awareness and somebody has to commit to it.
+    seekRadius: 22,
+
+    // Four clearly separated hues. Distinct shapes alone were not enough --
+    // additive glow washes shapes out at range, and colour is what actually
+    // carries across the arena. Avoid near-white: it blows out under bloom and
+    // stops reading as any colour at all.
+    shield: {
+      radius: 2.4,
+      color: 0x35e8ff, // cyan
+    },
+    permaboost: {
+      color: 0xffc23d, // gold
+    },
+    frost: {
+      color: 0x7ab8ff, // periwinkle -- deliberately off cyan, see above
+      slowDuration: 2.5,
+      speedMul: 0.4,
+      tint: 0x2b7fd4,
+    },
+    rocket: {
+      color: 0xff45d0,
+      // Straight flight before it starts hunting, so a point-blank shot still
+      // goes where you pointed it.
+      armDelay: 0.35,
+      seekRadius: 22,
+      turnRate: 3.2, // rad/sec
+      length: 1.1,
+    },
+  },
+
   camera: {
     offset: [0.8, 1.15, 6.2],
     stiffness: 12,

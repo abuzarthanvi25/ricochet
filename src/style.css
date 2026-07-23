@@ -148,6 +148,115 @@ canvas#scene {
   }
 }
 
+/* ---- equipped powerup ---- */
+
+#powerup {
+  position: absolute;
+  left: 34px;
+  /* Clears #bottom-left (INTEGRITY label sits at roughly 96px) plus room for
+     this widget's own label underneath it. */
+  bottom: 132px;
+  width: 76px;
+  height: 76px;
+  /* Tinted per type from the registry; every child inherits it. */
+  color: var(--cyan);
+}
+
+#powerup .pu-ring {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+#powerup .pu-ring-bg {
+  fill: rgba(5, 7, 13, 0.55);
+  stroke: rgba(223, 246, 255, 0.14);
+  stroke-width: 3;
+}
+
+/* Same trick as #cooldown-ring: dasharray = circumference, animate the offset. */
+#powerup-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dashoffset: 0;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+#powerup .pu-glyph {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+#powerup-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+  color: currentColor;
+  opacity: 0.85;
+}
+
+/* Last two seconds: pulse so the expiry is never a surprise. */
+#powerup.expiring .pu-glyph,
+#powerup.expiring #powerup-ring {
+  animation: pulse 0.34s ease-in-out infinite alternate;
+}
+
+#powerup-toast {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 108px);
+  transform: translateX(-50%);
+  text-align: center;
+  animation: toast 2.4s ease-out forwards;
+}
+
+#powerup-toast .pt-label {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-shadow: 0 0 14px currentColor;
+}
+
+#powerup-toast .pt-blurb {
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  opacity: 0.75;
+  color: #dff6ff;
+}
+
+@keyframes toast {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  12% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* ---- bars ---- */
 
 #bottom-left {
@@ -269,6 +378,9 @@ canvas#scene {
 #killfeed .line .bot {
   color: var(--red);
 }
+#killfeed .line .pu {
+  color: var(--amber);
+}
 #killfeed .line .verb {
   opacity: 0.5;
   margin: 0 7px;
@@ -348,6 +460,19 @@ canvas#scene {
 .nameplate .np-fill.critical {
   background: #fff;
   box-shadow: 0 0 10px #fff;
+}
+
+.nameplate .np-badge {
+  display: none;
+  width: 15px;
+  height: 15px;
+  margin: 4px auto 0;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px currentColor);
+  animation: pulse 0.9s ease-in-out infinite alternate;
 }
 
 /* ---- debug ---- */
