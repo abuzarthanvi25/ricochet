@@ -86,7 +86,9 @@ export class Arena {
         side: THREE.BackSide,
         emissive: 0x1a4a66,
         emissiveMap: tex,
-        emissiveIntensity: 0.9,
+        // Nudged up with the larger arena so the far grid still reads through the
+        // pushed-out fog. Emissive intensity is a uniform -- no recompile.
+        emissiveIntensity: 1.0,
       })
     })
 

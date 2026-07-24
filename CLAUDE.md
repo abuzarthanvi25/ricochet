@@ -142,6 +142,37 @@ sphere makes them vanish.
 sane on paper blow out to solid white: the shield started at 0.1/0.45 and hid
 the bot entirely. Shield and pickup materials sit at 0.03–0.28 for that reason.
 
+**`maxHp` is a per-instance field, and `spawnAt` resets from it.** Difficulty
+scales bot HP (`Enemy.applyDifficulty`) and the player has its own pool
+(`Game.setDifficulty`). `Bot.spawnAt` sets `this.hp = this.maxHp`, never
+`CFG.bot.maxHp` — the constant reset is the bug that silently reverts a scaled
+bot to 100 on every respawn. HUD and nameplate fractions divide by `bot.maxHp`
+too, not the constant.
+
+**Aim assist bends only the initial fire direction, before spawn.** `aimAssist()`
+in `core/util.js` runs in `Player.think` on a fresh shot's direction and nothing
+else. It never touches a projectile mid-flight, so the analytic sweep and the
+arming rule are untouched — a magnetised shot bounces and arms like any other.
+Strength is `diff.aimAssist` gated by `game.aimAssistEnabled`; both are 0/off on
+SOLDIER and VETERAN, which must stay bit-for-bit unchanged.
+
+**Fog range is what darkens a bigger arena, not lighting.** Fog is applied after
+lighting/emissive, so a wall past `fogFar` renders near-black however it is lit.
+Relight a resized box by pushing `fogNear/fogFar`, the static ambient/key
+_intensity_, wall `emissiveIntensity` and the point pool's `distance` — all
+uniforms. Never raise `CFG.pools.lights` or add a light to brighten the room:
+that changes the visible light count and recompiles every material (see above).
+
+**Flight assist is a player-only drag swap.** `Bot.integrate` uses
+`CFG.player.assistDrag` in place of `this.drag` when `this._assistBraking` is set,
+and only `Player.think` ever sets that flag (no thrust held, no dash in flight).
+Bots must keep their normal drag — their coasting drift is part of how they read.
+
+**The radar is DOM/canvas, never three.js.** `ui/radar.js` draws to a 2D canvas,
+so it adds zero shader-program surface. Keep it that way; a WebGL radar would be
+new program-key surface on the hottest path. The blip projection is the pure
+`computeBlip()` (unit-tested headless); the class only does the canvas drawing.
+
 ## Conventions
 
 - Frame-rate independent: `Math.pow(k, dt)` for damping, `1 - Math.exp(-rate*dt)`

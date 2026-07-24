@@ -35,6 +35,43 @@ export function jitterDirection(dir, deg) {
   return dir.applyAxisAngle(_jitAxis, rand(-deg, deg) * (Math.PI / 180)).normalize()
 }
 
+const _aaTo = new THREE.Vector3()
+const _aaAxis = new THREE.Vector3()
+/**
+ * Bullet magnetism for the player. Bends `dir` (a unit vector from `origin`)
+ * toward whichever candidate in `bots` sits nearest the aim ray, provided that
+ * bot is within `coneDeg` of the ray and no farther than `maxDist`. `strength`
+ * is the fraction of the angular gap to close: 0 is off, 1 snaps onto the bot's
+ * centre. Only the INITIAL direction is nudged -- the caller spawns the
+ * projectile from it, so the analytic sweep and the ricochet arming rule are
+ * both untouched, and a magnetised shot still bounces and can still kill you.
+ * Skips `exclude` (the shooter) and anyone on the shooter's team. Mutates and
+ * returns `dir`.
+ */
+export function aimAssist(origin, dir, bots, exclude, strength, coneDeg, maxDist) {
+  if (strength <= 0) return dir
+  let best = null
+  let bestAngle = (coneDeg * Math.PI) / 180
+  for (const b of bots) {
+    if (!b.alive || b === exclude || b.team === exclude.team) continue
+    _aaTo.subVectors(b.pos, origin)
+    const dist = _aaTo.length()
+    if (dist > maxDist || dist < 1e-4) continue
+    _aaTo.multiplyScalar(1 / dist)
+    const angle = Math.acos(clamp(dir.dot(_aaTo), -1, 1))
+    if (angle < bestAngle) {
+      bestAngle = angle
+      best = b
+    }
+  }
+  if (!best) return dir
+  _aaTo.subVectors(best.pos, origin).normalize()
+  _aaAxis.crossVectors(dir, _aaTo)
+  if (_aaAxis.lengthSq() < 1e-8) return dir // already dead on
+  _aaAxis.normalize()
+  return dir.applyAxisAngle(_aaAxis, bestAngle * strength).normalize()
+}
+
 const _orientM = new THREE.Matrix4()
 const _orientQ = new THREE.Quaternion()
 const _ZERO = new THREE.Vector3(0, 0, 0)

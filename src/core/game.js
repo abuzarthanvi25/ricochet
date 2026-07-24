@@ -10,6 +10,7 @@ import { LightPool } from '../fx/lights.js'
 import { sfx } from '../fx/audio.js'
 import { clamp } from './util.js'
 import { Nameplates } from '../ui/nameplates.js'
+import { Radar } from '../ui/radar.js'
 import { getDifficulty, loadDifficulty, saveDifficulty } from './difficulty.js'
 import { PowerupSystem, POWERUPS } from './powerups.js'
 
@@ -66,9 +67,13 @@ export class Game {
 
     this.nameplates = new Nameplates(document.getElementById('nameplates'))
     for (const e of this.enemies) this.nameplates.register(e)
+    this.radar = new Radar(document.getElementById('radar'))
 
     this.attackers = new Set()
     this._ranked = []
+    // Global aim-assist gate (options toggle); its strength still comes from the
+    // difficulty. main.js overrides this from localStorage on boot.
+    this.aimAssistEnabled = true
     this._addLight = (pos, color, intensity) => this.lights.add(pos, color, intensity)
     this.setDifficulty(loadDifficulty())
   }
@@ -79,6 +84,11 @@ export class Game {
     this.difficultyId = getDifficulty(id).id
     this.diff = getDifficulty(id)
     for (const e of this.enemies) e.applyDifficulty(this.diff)
+    // The player has its own HP pool -- a survivability buffer on the easy tiers,
+    // not shared with the bots. Clamp current hp if the cap dropped mid-match; a
+    // raise takes full effect on the next spawn (and via regen), not as a heal.
+    this.player.maxHp = this.diff.playerHp
+    if (this.player.hp > this.player.maxHp) this.player.hp = this.player.maxHp
     saveDifficulty(this.difficultyId)
     this.onDifficultyChange?.(this.difficultyId)
   }
@@ -130,7 +140,7 @@ export class Game {
 
     this.rig.reset(this.player)
     this.hud.setScore(0, 0, CFG.match.killsToWin)
-    this.hud.setHp(this.player.hp, CFG.bot.maxHp)
+    this.hud.setHp(this.player.hp, this.player.maxHp)
     this.hud.setWarn(false)
     this.hud.setPowerup(null, 0)
     this.hud.setFrozen(0)
@@ -186,6 +196,7 @@ export class Game {
     this._updateLights()
     this._updateHud()
     this.nameplates.update(this.camera, this.bots, this.arena, this.viewport)
+    this.radar.update(this.rig, this.player.pos, this.enemies)
   }
 
   _handleRespawns(dt) {
@@ -255,7 +266,7 @@ export class Game {
 
   _updateHud() {
     const p = this.player
-    this.hud.setHp(p.alive ? p.hp : 0, CFG.bot.maxHp)
+    this.hud.setHp(p.alive ? p.hp : 0, p.maxHp)
     this.hud.setCooldown(p.alive ? 1 - clamp(p.fireCd / CFG.player.fireCooldown, 0, 1) : 0)
     this.hud.setBoost(p.alive ? 1 - clamp(p.boostCd / CFG.player.boostCooldown, 0, 1) : 0)
     this.hud.setPowerup(p.alive ? p.powerup : null, p.powerup01())

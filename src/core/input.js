@@ -3,7 +3,9 @@
  *
  * Note on key choice: the plan originally had Ctrl for boost, but Chrome's
  * Ctrl+W (close tab) fires straight through pointer lock -- holding boost while
- * thrusting forward would close the game. Boost is Q / right mouse instead.
+ * thrusting forward would close the game. Boost is Q only. It used to also be on
+ * the right mouse button, but that was a newcomer trap: the natural "aim/zoom"
+ * reflex dashed you into a wall, and RMB has no other use here.
  */
 
 const state = {
@@ -39,7 +41,6 @@ export function initInput(canvas) {
   canvas.addEventListener('mousedown', (e) => {
     if (!state.locked) return
     if (e.button === 0) state.firing = true
-    if (e.button === 2) state.boostEdge = true
   })
 
   window.addEventListener('mouseup', (e) => {

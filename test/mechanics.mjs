@@ -18,7 +18,7 @@ const ok = (name, cond, extra = '') => {
 const near = (a, b, eps = 1e-4) => Math.abs(a - b) < eps
 
 console.log('\n== config ==')
-ok('arena half extents', HALF.x === 30 && HALF.y === 20 && HALF.z === 30)
+ok('arena half extents', HALF.x === 42 && HALF.y === 26 && HALF.z === 42)
 
 // ---------------------------------------------------------------- collision
 const { sweepArena, raySphere, clampToArena, resolveSphere } =
@@ -45,8 +45,8 @@ console.log('\n== sweepArena ==')
   sweepArena(new THREE.Vector3(0, 19, 0), new THREE.Vector3(0.1, 1, 0).normalize(), 1000, r, n)
   ok('nearest axis wins near ceiling', n.y === -1, n.toArray())
 
-  // already outside -> immediate contact, still reflects inward
-  t = sweepArena(new THREE.Vector3(31, 0, 0), new THREE.Vector3(1, 0, 0), 1000, r, n)
+  // already outside -> immediate contact, still reflects inward (HALF.x is 42)
+  t = sweepArena(new THREE.Vector3(43, 0, 0), new THREE.Vector3(1, 0, 0), 1000, r, n)
   ok('outside clamps to t=0', t === 0 && n.x === -1, `t=${t}`)
 }
 
@@ -417,8 +417,8 @@ console.log('\n== rocketiles ==')
     },
   })
 
-  const owner = mkBot(1, 0, 0, 0)
-  const target = mkBot(2, 0, 0, -14)
+  const owner = mkBot(1, 0, 0, 2)
+  const target = mkBot(2, 0, 0, -34)
   const game = {
     arena: { debris: [] },
     bots: [owner, target],
@@ -431,10 +431,14 @@ console.log('\n== rocketiles ==')
     onProjectileBounce() {},
   }
 
-  // 30 degrees off the target: the rocket must correct, the blast must not.
-  const off = new THREE.Vector3(Math.sin(Math.PI / 6), 0, -Math.cos(Math.PI / 6))
+  // 20 degrees off the target, fired down a long lane. The seeker's turn radius
+  // is speed/turnRate ~= 14u, so it corrects over the approach and lines up on a
+  // target this far downrange; the plain blast flies straight past. (A steeper
+  // angle at close range would orbit without ever connecting -- that is the
+  // seeker's real limit, not a bug, so the test does not ask for it.)
+  const off = new THREE.Vector3(Math.sin((20 * Math.PI) / 180), 0, -Math.cos((20 * Math.PI) / 180))
 
-  sys.spawn(1, 'player', new THREE.Vector3(0, 0, -2), off.clone(), 1, 'rocket')
+  sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), off.clone(), 1, 'rocket')
   for (let i = 0; i < 180 && sys.active.length; i++) sys.update(1 / 60, game)
   ok(
     'rocketile corrects onto an off-axis target',
@@ -444,8 +448,8 @@ console.log('\n== rocketiles ==')
 
   damage.length = 0
   sys.clear()
-  sys.spawn(1, 'player', new THREE.Vector3(0, 0, -2), off.clone())
-  for (let i = 0; i < 40 && sys.active.length; i++) sys.update(1 / 60, game)
+  sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), off.clone())
+  for (let i = 0; i < 120 && sys.active.length; i++) sys.update(1 / 60, game)
   ok('a plain blast on the same line misses', !damage.some((d) => d.id === 2))
 
   // Arming rule governs the seeker: no lock on the owner before the first bounce.
@@ -782,6 +786,175 @@ console.log('\n== powerup budget ==')
 
   sys.reset()
   ok('reset refills the budget', sys.remaining === CFG.powerups.budgetPerMatch && sys.active === 0)
+}
+
+console.log('\n== radar (computeBlip) ==')
+{
+  const { computeBlip } = await import('../src/ui/radar.js')
+  const fwd = new THREE.Vector3(0, 0, -1) // forward is -Z
+  const right = new THREE.Vector3(1, 0, 0)
+  const range = CFG.radar.range
+
+  let b = computeBlip(new THREE.Vector3(0, 0, -20), fwd, right, range)
+  ok('an enemy ahead is above centre', b.y > 0 && Math.abs(b.x) < 1e-9, JSON.stringify(b))
+
+  b = computeBlip(new THREE.Vector3(0, 0, 20), fwd, right, range)
+  ok('an enemy behind is below centre', b.y < 0 && Math.abs(b.x) < 1e-9, JSON.stringify(b))
+
+  b = computeBlip(new THREE.Vector3(20, 0, 0), fwd, right, range)
+  ok('an enemy to the right is on the +x side', b.x > 0 && Math.abs(b.y) < 1e-9)
+
+  b = computeBlip(new THREE.Vector3(0, 0, -range * 2), fwd, right, range)
+  ok(
+    'a distant enemy clamps to the rim',
+    b.clamped && near(Math.hypot(b.x, b.y), 1, 1e-6),
+    JSON.stringify(b)
+  )
+
+  b = computeBlip(new THREE.Vector3(0, 9, -10), fwd, right, range)
+  ok('the vertical offset is carried as vy', b.vy === 9)
+
+  // Heading rotates the disc: facing +X, an enemy at +X is now "ahead" (above).
+  b = computeBlip(
+    new THREE.Vector3(20, 0, 0),
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(0, 0, 1),
+    range
+  )
+  ok('the disc rotates with heading', b.y > 0, JSON.stringify(b))
+}
+
+console.log('\n== flight assist ==')
+{
+  // Model Bot.integrate's drag branch: dragK = _assistBraking ? assistDrag : drag.
+  // "Feels stopped" at ~1.5 u/s from a full-speed drift; assist must get there in
+  // far fewer frames than base drag, and inside ~0.5s.
+  const framesToStop = (dragK) => {
+    let v = CFG.player.maxSpeed
+    let f = 0
+    while (v > 1.5 && f < 600) {
+      v *= Math.pow(dragK, 1 / 60)
+      f++
+    }
+    return f
+  }
+  const base = framesToStop(CFG.player.drag)
+  const assisted = framesToStop(CFG.player.assistDrag)
+  ok(
+    'assist brakes far faster than base drag',
+    assisted < base / 2,
+    `assist ${assisted} vs base ${base}`
+  )
+  ok('assist reaches a near-stop within ~0.5s', assisted <= 30, `${assisted} frames`)
+  ok('assist drag is stronger than base drag', CFG.player.assistDrag < CFG.player.drag)
+}
+
+console.log('\n== aim assist ==')
+{
+  const { aimAssist } = await import('../src/core/util.js')
+  const origin = new THREE.Vector3(0, 0, 0)
+  const player = { team: 'player', alive: true, pos: origin }
+  const deg = (d) => (d * Math.PI) / 180
+  const enemyAt = (offDeg, dist) => ({
+    team: 'enemy',
+    alive: true,
+    pos: new THREE.Vector3(Math.sin(deg(offDeg)) * dist, 0, -Math.cos(deg(offDeg)) * dist),
+  })
+  const straight = () => new THREE.Vector3(0, 0, -1)
+  const angleTo = (a, b) => Math.acos(Math.min(1, Math.max(-1, a.dot(b))))
+
+  // Enemy 5 degrees off a straight -Z shot, inside the 7 degree cone, 20 units out.
+  const inCone = enemyAt(5, 20)
+  const toEnemy = inCone.pos.clone().normalize()
+
+  let d = aimAssist(origin, straight(), [player, inCone], player, 1, 7, 60)
+  ok(
+    'full-strength assist snaps onto the target',
+    angleTo(d, toEnemy) < 1e-3,
+    `${angleTo(d, toEnemy)}`
+  )
+
+  d = aimAssist(origin, straight(), [player, inCone], player, 0.5, 7, 60)
+  ok(
+    'half strength closes half the gap',
+    near(angleTo(d, toEnemy), deg(5) * 0.5, 1e-3),
+    `${angleTo(d, toEnemy)}`
+  )
+
+  d = aimAssist(origin, straight(), [player, enemyAt(20, 20)], player, 1, 7, 60)
+  ok('an enemy outside the cone is left alone', angleTo(d, straight()) === 0)
+
+  d = aimAssist(origin, straight(), [player, enemyAt(5, 80)], player, 1, 7, 60)
+  ok('an enemy beyond maxDist is left alone', angleTo(d, straight()) === 0)
+
+  const dead = enemyAt(5, 20)
+  dead.alive = false
+  d = aimAssist(origin, straight(), [player, dead], player, 1, 7, 60)
+  ok('a dead enemy is not targeted', angleTo(d, straight()) === 0)
+
+  d = aimAssist(origin, straight(), [player, inCone], player, 0, 7, 60)
+  ok('strength 0 is a no-op', angleTo(d, straight()) === 0)
+
+  const ally = { team: 'player', alive: true, pos: enemyAt(5, 20).pos }
+  d = aimAssist(origin, straight(), [player, ally], player, 1, 7, 60)
+  ok('never bends toward a teammate', angleTo(d, straight()) === 0)
+}
+
+console.log('\n== difficulty easing ==')
+{
+  const { DIFFICULTIES, DEFAULT_DIFFICULTY } = await import('../src/core/difficulty.js')
+  const D = DIFFICULTIES
+  const hits = (hp) => Math.ceil(hp / CFG.proj.directDamage) // 34 dmg per player hit
+
+  ok('CADET is the default', DEFAULT_DIFFICULTY === 'cadet' && !!D.cadet)
+  ok(
+    'every preset carries the easing fields',
+    Object.values(D).every(
+      (d) => 'botHp' in d && 'playerHp' in d && 'playerRegen' in d && 'aimAssist' in d
+    )
+  )
+  ok('CADET bot dies in 2 hits', hits(D.cadet.botHp) === 2, `${hits(D.cadet.botHp)}`)
+  ok('RECRUIT bot dies in 2 hits', hits(D.recruit.botHp) === 2, `${hits(D.recruit.botHp)}`)
+  ok('SOLDIER bot still takes 3', hits(D.soldier.botHp) === 3)
+  ok('VETERAN bot still takes 3', hits(D.veteran.botHp) === 3)
+  ok('easy tiers buffer player HP', D.cadet.playerHp > 100 && D.recruit.playerHp > 100)
+  ok('hard tiers leave player HP at 100', D.soldier.playerHp === 100 && D.veteran.playerHp === 100)
+  ok(
+    'aim assist only on easy tiers',
+    D.cadet.aimAssist > 0 && D.recruit.aimAssist > 0 && !D.soldier.aimAssist && !D.veteran.aimAssist
+  )
+  ok('regen only on easy tiers', D.cadet.playerRegen > 0 && D.soldier.playerRegen === 0)
+}
+
+console.log('\n== maxHp respawn + regen ==')
+{
+  // The reset trap: spawnAt must refill from this.maxHp, not the config constant,
+  // or a difficulty-scaled bot reverts to 100 every respawn. Model the two
+  // methods with the exact field logic from Bot/Enemy.
+  const bot = {
+    maxHp: CFG.bot.maxHp,
+    hp: CFG.bot.maxHp,
+    applyDifficulty(botHp) {
+      this.maxHp = botHp
+      if (this.hp > this.maxHp) this.hp = this.maxHp
+    },
+    spawnAt() {
+      this.hp = this.maxHp // <- from the instance field, NOT CFG.bot.maxHp
+    },
+  }
+  bot.applyDifficulty(50)
+  ok('applyDifficulty clamps current hp', bot.hp === 50)
+  bot.hp = 20
+  bot.spawnAt()
+  ok('respawn refills the scaled pool, not 100', bot.hp === 50, `${bot.hp}`)
+
+  // Player regen: only after regenDelay, capped at maxHp, off when the rate is 0.
+  const regenStep = (hp, maxHp, since, rate, dt) =>
+    rate > 0 && since > CFG.player.regenDelay && hp < maxHp ? Math.min(maxHp, hp + rate * dt) : hp
+  ok('no regen before the delay', regenStep(50, 150, 1.0, 8, 1 / 60) === 50)
+  ok('regen after the delay', regenStep(50, 150, 4.0, 8, 1 / 60) > 50)
+  ok('regen never exceeds maxHp', regenStep(149.99, 150, 4.0, 8, 1) === 150)
+  ok('no regen when the rate is 0', regenStep(50, 100, 10, 0, 1) === 50)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

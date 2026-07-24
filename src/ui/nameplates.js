@@ -104,7 +104,7 @@ export class Nameplates {
       const x = (_proj.x * 0.5 + 0.5) * width
       const y = (-_proj.y * 0.5 + 0.5) * height
 
-      const hp01 = clamp(bot.hp / CFG.bot.maxHp, 0, 1)
+      const hp01 = clamp(bot.hp / bot.maxHp, 0, 1)
       // Shrink and fade with distance so a far-off crowd does not clutter.
       const scale = clamp(1.15 - dist / CFG.ui.nameplateMaxDist, 0.55, 1)
       const opacity = clamp(1.35 - dist / CFG.ui.nameplateMaxDist, 0.35, 1)

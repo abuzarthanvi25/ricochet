@@ -9,7 +9,50 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-_Nothing yet._
+A newcomer-experience pass: the game was too punishing for a first-time player
+even on the old easiest tier, so this softens the landing without changing what
+the game is at the top.
+
+### Added
+
+- **CADET difficulty** — a new easiest tier below RECRUIT, and the default. One
+  bot fires at a time, with a wide aim cone, slow cadence and low damage.
+- **The easy tiers now ease more than enemy output.** CADET and RECRUIT make bots
+  **less tanky** (two clean hits instead of three), give **you a larger HP pool
+  that regenerates** after a few seconds without being hit, and turn on **aim
+  assist**. SOLDIER and VETERAN are deliberately untouched — bot HP 100, your HP
+  100, no regen, no aim help — so they play exactly as before.
+- **Aim assist (bullet magnetism)** — a fresh player shot bends toward the enemy
+  nearest your crosshair, within a narrow cone, by a strength that comes from the
+  difficulty. It nudges only the initial direction before the shot spawns, so the
+  ricochet arming rule and the analytic no-tunnelling guarantee are untouched — a
+  magnetised shot still bounces and can still come back to kill you. There is a
+  global on/off toggle independent of difficulty.
+- **Flight assist (`X`, on by default)** — auto-brakes the instant you release
+  thrust, so the ship settles to a near-stop in about half a second instead of
+  drifting on. Toggleable so veterans keep the full Newtonian coast; the HUD
+  flashes the new state when you press `X`.
+- **Radar disc** (bottom-right) — you at the centre, red blips for the bots,
+  screen-up is your heading, so an enemy behind you reads as a blip below centre,
+  with a short stalk for above/below. Drawn to a 2D canvas, not three.js, so it
+  adds no shader-program surface. Answers the "where did that shot come from"
+  problem that 6-DOF makes acute.
+- **Options on the title screen and pause menu** — flight-assist and aim-assist
+  toggles plus a mouse-sensitivity slider, built once and injected into both
+  screens (the same shared-builder pattern as the sound toggle), and persisted to
+  `localStorage`.
+
+### Changed
+
+- **The arena is ~1.4× larger** — 84 × 52 × 84, up from 60 × 40 × 60 — for more
+  room to fly. Fog range, ambient/key light intensity, wall emissive and the
+  point-light pool's reach all scale with it, because **fog, not lighting, is
+  what darkened a bigger box**: fog is applied after lighting, so a wall past
+  `fogFar` renders near-black however it is lit. None of this changes the visible
+  light **count**, so no shaders recompile. Debris count and nameplate range grew
+  to match; base movement speed is up slightly so travel isn't tedious.
+- **Boost is `Q` only.** It used to double up on the right mouse button, which
+  dashed newcomers into a wall on the natural "aim" reflex; RMB is now unbound.
 
 ## [0.2.0] — 2026-07-24
 
