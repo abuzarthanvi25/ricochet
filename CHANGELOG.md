@@ -55,10 +55,15 @@ projectile-speed option.
   with a short stalk for above/below. Drawn to a 2D canvas, not three.js, so it
   adds no shader-program surface. Answers the "where did that shot come from"
   problem that 6-DOF makes acute.
-- **Options on the title screen and pause menu** — flight-assist and aim-assist
-  toggles plus mouse-sensitivity and shot-speed sliders, built once and injected
-  into both screens (the same shared-builder pattern as the sound toggle), and
-  persisted to `localStorage`.
+- **A dedicated Options menu**, reached from both the title screen and the pause
+  menu, gathering every setting in one place: difficulty, flight-assist and
+  aim-assist toggles, mouse-sensitivity and shot-speed sliders, the sound toggle,
+  and a **graphics** section. All persist to `localStorage`. This declutters the
+  pause menu, which now shows only the controls legend plus RESUME / OPTIONS.
+- **Bloom can be turned off** (graphics options). Bloom is the single most
+  expensive thing in the frame, so switching it off is the biggest win on a
+  low-end machine. It toggles the composer pass's `enabled` flag, so it changes
+  no shader program and is free and instant.
 
 ### Changed
 
@@ -71,6 +76,14 @@ projectile-speed option.
   to match; base movement speed is up slightly so travel isn't tedious.
 - **Boost is `Q` only.** It used to double up on the right mouse button, which
   dashed newcomers into a wall on the natural "aim" reflex; RMB is now unbound.
+
+### Fixed
+
+- **Flash of unstyled content on load.** `style.css` is imported by `main.js`, so
+  in dev it was injected only once the bundle ran — flashing the raw, unstyled
+  overlay for a frame first. The page now paints dark and hides the body until
+  `main.js` clears a `preload` class (styles are applied by then): no flash, just
+  a brief dark screen.
 
 ## [0.2.0] — 2026-07-24
 

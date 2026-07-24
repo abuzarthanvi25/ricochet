@@ -79,8 +79,11 @@ the first hour easier without changing what the game is:
   within a narrow cone. Its strength comes from the difficulty (strong on CADET,
   off on SOLDIER/VETERAN) and there is a global on/off toggle.
 - **Sensitivity** and **shot-speed** sliders scale mouse look and projectile
-  speed (0.6×–1.6×); both toggles and both sliders live on the title screen and
-  the pause menu and persist to `localStorage`.
+  speed (0.6×–1.6×). All of these — plus difficulty, sound, and a **graphics**
+  section that can turn **bloom** off (the biggest GPU win on a weak machine) —
+  live in a dedicated **Options** menu reached from both the title screen and the
+  pause menu, and persist to `localStorage`. The pause menu itself stays lean:
+  the controls legend plus RESUME / OPTIONS.
 - A **radar disc** (bottom-right) puts you at the centre with red blips for the
   bots — screen-up is your heading, so an enemy behind you shows up below centre,
   with a short stalk for above/below. It answers the "where did that shot come

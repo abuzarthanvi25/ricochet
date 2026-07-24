@@ -29,7 +29,13 @@ import {
   saveSensitivity,
   getProjSpeedMul,
   setProjSpeedMul,
+  loadBloom,
+  saveBloom,
 } from './core/settings.js'
+
+// Styles are applied by the time this module runs, so drop the anti-FOUC guard
+// (see index.html) and reveal the fully-styled page.
+document.documentElement.classList.remove('preload')
 
 const canvas = document.getElementById('scene')
 
@@ -151,14 +157,25 @@ function applySensitivity(mul) {
 function applyProjSpeed(mul) {
   overlays.setProjSpeed(setProjSpeedMul(mul))
 }
+// Bloom is a composer pass -- `enabled = false` skips it (no material recompile,
+// so toggling is free and safe). Big GPU saver on low-end machines.
+let bloomOn = loadBloom()
+function applyBloom(on) {
+  bloomOn = on
+  bloom.enabled = on
+  saveBloom(on)
+  overlays.setBloom(on)
+}
 overlays.onFlightAssistToggle(() => applyFlightAssist(!flightAssistOn))
 overlays.onAimAssistToggle(() => applyAimAssist(!aimAssistOn))
 overlays.onSensitivityChange((m) => applySensitivity(m))
 overlays.onProjSpeedChange((m) => applyProjSpeed(m))
+overlays.onBloomToggle(() => applyBloom(!bloomOn))
 applyFlightAssist(flightAssistOn)
 applyAimAssist(aimAssistOn)
 applySensitivity(sensitivity)
 applyProjSpeed(getProjSpeedMul())
+applyBloom(bloomOn)
 
 overlays.bind({
   onPlay: () => beginMatch(true),
@@ -305,6 +322,7 @@ async function boot() {
       setAimAssist: applyAimAssist,
       setSensitivity: applySensitivity,
       setProjSpeed: applyProjSpeed,
+      setBloom: applyBloom,
     },
   }
 

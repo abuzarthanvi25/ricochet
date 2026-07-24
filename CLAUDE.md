@@ -199,6 +199,16 @@ multiplies `CFG.proj.speed` by `getProjSpeedMul()`, so the options slider scales
 spawned shots AND the enemy lead-aim solver together — never scale one without
 the other, or bots mislead every shot.
 
+**Toggle bloom with the pass's `enabled` flag, never by removing the pass.**
+`bloom.enabled = false` skips it in `EffectComposer.render` with no material
+recompile — the graphics option relies on this. Adding/removing a pass, or a new
+pass, is program-key surface; the `enabled` flag is not.
+
+**`style.css` is imported by `main.js`, so guard the load with `preload`.**
+`index.html` hides the body (inline critical CSS) while `<html class="preload">`;
+`main.js` clears the class once it runs, by which point styles are applied. Do
+not remove that guard, or dev reintroduces the flash of unstyled overlay.
+
 ## Conventions
 
 - Frame-rate independent: `Math.pow(k, dt)` for damping, `1 - Math.exp(-rate*dt)`

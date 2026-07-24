@@ -33,11 +33,13 @@ export class Overlays {
       over: $('screen-over'),
       win: $('screen-win'),
       paused: $('screen-paused'),
+      options: $('screen-options'),
     }
     this.btnPlay = $('btn-play')
     this.btnRetry = $('btn-retry')
     this.btnAgain = $('btn-again')
     this.btnResume = $('btn-resume')
+    this.btnOptionsBack = $('btn-options-back')
     this.loading = $('loading')
 
     this.btnPlay.disabled = true
@@ -47,17 +49,55 @@ export class Overlays {
     this.powerupGroups = [...document.querySelectorAll('[data-powerup-group]')]
     this.soundGroups = [...document.querySelectorAll('[data-sound-group]')]
     this.optionGroups = [...document.querySelectorAll('[data-options-group]')]
+    this.graphicsGroups = [...document.querySelectorAll('[data-graphics-group]')]
     this._onDifficultyPick = null
     this._onSoundToggle = null
     this._onFlightAssistToggle = null
     this._onAimAssistToggle = null
     this._onSensitivityChange = null
     this._onProjSpeedChange = null
+    this._onBloomToggle = null
     this._buildDifficultyControls()
     this._buildControls()
     this._buildPowerupGuide()
     this._buildSoundToggle()
     this._buildOptions()
+    this._buildGraphics()
+
+    // Options is its own screen, opened from the title and pause menus and
+    // returning to whichever opened it. Pure overlay navigation -- opening it
+    // mid-match must not resume the game.
+    this._optionsReturn = 'title'
+    for (const btn of document.querySelectorAll('.btn-open-options')) {
+      btn.addEventListener('click', (e) => {
+        e.currentTarget.blur()
+        this.openOptions(e.currentTarget.dataset.return)
+      })
+    }
+    this.btnOptionsBack.addEventListener('click', (e) => {
+      e.currentTarget.blur()
+      this._show(this._optionsReturn)
+    })
+  }
+
+  openOptions(returnTo) {
+    this._optionsReturn = returnTo || 'title'
+    this._show('options')
+  }
+
+  /** Graphics toggles (currently just bloom). Shares the option-toggle styling. */
+  _buildGraphics() {
+    for (const group of this.graphicsGroups) {
+      group.append(this._toggleButton('bloom', 'BLOOM', () => this._onBloomToggle?.()))
+    }
+  }
+
+  onBloomToggle(fn) {
+    this._onBloomToggle = fn
+  }
+
+  setBloom(on) {
+    this._setToggle('bloom', on)
   }
 
   /**
@@ -136,9 +176,7 @@ export class Overlays {
   }
 
   _setToggle(opt, on) {
-    for (const group of this.optionGroups) {
-      const btn = group.querySelector(`.opt-btn[data-opt="${opt}"]`)
-      if (!btn) continue
+    for (const btn of document.querySelectorAll(`.opt-btn[data-opt="${opt}"]`)) {
       btn.classList.toggle('on', on)
       btn.querySelector('.opt-label').textContent = `${btn.dataset.base}: ${on ? 'ON' : 'OFF'}`
     }
@@ -153,9 +191,7 @@ export class Overlays {
   }
 
   _setSlider(key, mul) {
-    for (const group of this.optionGroups) {
-      const wrap = group.querySelector(`.opt-slider[data-slider="${key}"]`)
-      if (!wrap) continue
+    for (const wrap of document.querySelectorAll(`.opt-slider[data-slider="${key}"]`)) {
       wrap.querySelector('.opt-input').value = mul
       wrap.querySelector('.opt-val').textContent = `${mul.toFixed(2)}×`
     }
