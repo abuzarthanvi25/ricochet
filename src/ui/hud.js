@@ -22,6 +22,7 @@ export class Hud {
     this.killfeed = $('killfeed')
     this.vignette = $('vignette')
     this.warn = $('warn-inbound')
+    this.assistFlash = $('assist-flash')
     this.debugEl = $('debug')
 
     this.frost = $('frost')
@@ -153,6 +154,19 @@ export class Hud {
 
   setWarn(on) {
     this.warn.classList.toggle('hidden', !on)
+  }
+
+  /** Brief centred readout when flight assist is toggled with X, mid-fight. */
+  flashAssist(on) {
+    const el = this.assistFlash
+    el.textContent = on ? 'FLIGHT ASSIST ON' : 'FLIGHT ASSIST OFF'
+    el.classList.toggle('off', !on)
+    el.classList.remove('hidden')
+    el.style.animation = 'none'
+    void el.offsetWidth // restart the CSS animation
+    el.style.animation = ''
+    clearTimeout(this._assistTimer)
+    this._assistTimer = setTimeout(() => el.classList.add('hidden'), 1200)
   }
 
   addKill({ killer, killerTeam, victim, victimTeam, verb }) {

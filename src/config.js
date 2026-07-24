@@ -3,15 +3,22 @@
 
 export const CFG = {
   arena: {
-    w: 60,
-    h: 40,
-    d: 60,
-    fogNear: 20,
-    fogFar: 95,
+    // Enlarged ~1.4x from the original 60x40x60 for more room to fly. Fog range
+    // scales WITH the box: the corner-to-corner diagonal is now ~130, and fog is
+    // applied after lighting/emissive in the shader, so a wall past fogFar reads
+    // near-black no matter how it is lit. fogFar sits just beyond the diagonal so
+    // the far wall stays visible. See fx.lightDistance and main.js's static
+    // lights, both nudged up to match -- none of which changes the light COUNT.
+    w: 84,
+    h: 52,
+    d: 84,
+    fogNear: 28,
+    fogFar: 135,
   },
 
   debris: {
-    count: 25,
+    // Scaled up with the arena so the field keeps roughly the same density.
+    count: 40,
     minR: 1.5,
     maxR: 5.0,
     driftMax: 1.2, // units/sec
@@ -33,12 +40,21 @@ export const CFG = {
 
   player: {
     accel: 55,
-    maxSpeed: 22,
+    maxSpeed: 24, // slightly up with the larger arena so travel isn't tedious
     drag: 0.12, // vel *= pow(drag, dt)  -- frame-rate independent
+    // Flight assist: when the player is holding no thrust key and not boosting,
+    // integrate() swaps this in for `drag`. Time constant ~0.17s, so the ship
+    // sheds most of its speed almost at once and settles to a near-stop in about
+    // half a second -- roughly three times snappier than the base drag's drift.
+    // Toggleable (X); default on. Bots never brake this way; their drift reads.
+    assistDrag: 0.003,
     boostImpulse: 18,
     boostCooldown: 1.2,
     fireCooldown: 0.28,
     bodyTurnRate: 9, // how fast the body catches up to the camera aim
+    // Seconds without taking damage before the player starts regenerating, on
+    // difficulties whose playerRegen is > 0 (easy tiers only).
+    regenDelay: 3.0,
   },
 
   enemy: {
@@ -80,6 +96,26 @@ export const CFG = {
     colorArmed: 0xff5a12,
     colorFullyArmed: 0xffd000,
     bouncesToFullHeat: 4,
+    // Two shots that cross within this distance ricochet off each other and both
+    // arm. Detection is a swept closest-approach over each frame's segment, so it
+    // cannot tunnel; see weapons/projectiles.js _resolveCollisions.
+    crossRadius: 0.7, // ~2 * radius
+  },
+
+  // Finite floating sea-mines. A fixed number are placed at match start and do
+  // not move or respawn -- destructible hazards you can bait bots into. Anything
+  // that touches one, or any projectile that hits one, sets it off; the blast
+  // damages everyone in radius, and a shot-triggered blast is credited to whoever
+  // fired the shot (a bot flying into one is an environmental kill, no score).
+  mines: {
+    count: 5,
+    radius: 1.3, // collision sphere (body + spikes)
+    bodyRadius: 0.85, // visual body sphere
+    spikeLen: 0.7,
+    blastRadius: 6.5,
+    blastDamage: 55, // NOT difficulty-scaled -- a hazard is a hazard
+    blastKnock: 30,
+    color: 0xff5a2a, // body emissive + explosion tint
   },
 
   powerups: {
@@ -163,7 +199,27 @@ export const CFG = {
 
   ui: {
     nameplateHeight: 1.15, // world units above the bot's centre (bot is ~1.66 tall)
-    nameplateMaxDist: 55,
+    nameplateMaxDist: 78, // up with the larger arena so plates show across it
+  },
+
+  // Bullet magnetism for the player only. A fresh player shot bends toward the
+  // enemy nearest the aim ray, by a fraction that comes from the difficulty
+  // (diff.aimAssist, 0 on SOLDIER/VETERAN). It nudges only the INITIAL fire
+  // direction before spawn -- the analytic sweep and the ricochet arming rule are
+  // untouched, so a magnetised shot still bounces and can still come back to kill
+  // you. Never targets a dead bot or the shooter.
+  assist: {
+    coneDeg: 7, // an enemy must sit within this half-angle of the raw aim ray
+    maxDist: 60, // ...and no farther than this, or magnetism does nothing
+  },
+
+  // Radar disc (ui/radar.js). Drawn to a 2D canvas, not three.js -- zero shader
+  // program surface. You sit at the centre, screen-up is your heading, so an
+  // enemy behind you reads as a blip below centre.
+  radar: {
+    size: 168, // canvas square, px
+    range: 70, // world units mapped to the disc radius; farther clamps to the rim
+    blip: 4.5, // blip radius, px
   },
 
   pools: {
@@ -186,8 +242,11 @@ export const CFG = {
     // difference in the glow.
     bloomScale: 0.5,
     trailLength: 14,
-    lightIntensity: 14,
-    lightDistance: 18,
+    // Reach widened with the larger arena. distance/intensity on a PointLight are
+    // uniforms, so this is free of the recompile that changing the light COUNT
+    // would trigger (see fx/lights.js).
+    lightIntensity: 16,
+    lightDistance: 26,
   },
 
   teams: {
