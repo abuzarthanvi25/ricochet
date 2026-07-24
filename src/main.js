@@ -19,7 +19,7 @@ import {
 import { Game, STATE } from './core/game.js'
 import { Hud } from './ui/hud.js'
 import { Overlays } from './ui/overlays.js'
-import { initAudio, resumeAudio } from './fx/audio.js'
+import { initAudio, resumeAudio, isMuted, setMuted } from './fx/audio.js'
 
 const canvas = document.getElementById('scene')
 
@@ -65,8 +65,9 @@ scene.add(rim)
 const composer = new EffectComposer(renderer)
 composer.addPass(new RenderPass(scene, camera))
 
+const BLOOM = CFG.fx.bloomScale
 const bloom = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  new THREE.Vector2(window.innerWidth * BLOOM, window.innerHeight * BLOOM),
   CFG.fx.bloomStrength,
   CFG.fx.bloomRadius,
   CFG.fx.bloomThreshold
@@ -81,7 +82,8 @@ function resize() {
   camera.updateProjectionMatrix()
   renderer.setSize(w, h)
   composer.setSize(w, h)
-  bloom.setSize(w, h)
+  // Bloom keeps its own reduced internal resolution -- see CFG.fx.bloomScale.
+  bloom.setSize(w * BLOOM, h * BLOOM)
   // Nameplates project into CSS pixels, so they need the logical size.
   if (game) game.viewport = { width: w, height: h }
 }
@@ -97,6 +99,14 @@ initAudio()
 let game = null
 let pendingStart = false
 let perf = null
+
+// Mute persists across sessions, so it is wired before the first screen shows.
+function applyMute(on) {
+  setMuted(on)
+  overlays.setMuted(isMuted())
+}
+overlays.onSoundToggle(() => applyMute(!isMuted()))
+applyMute(isMuted())
 
 overlays.bind({
   onPlay: () => beginMatch(true),
@@ -218,7 +228,23 @@ async function boot() {
   overlays.showTitle()
 
   // Dev hook: drive the game from the console without pointer lock.
-  window.RICOCHET = { game, scene, camera, renderer, composer, THREE, CFG, STATE, hud, overlays }
+  window.RICOCHET = {
+    game,
+    scene,
+    camera,
+    renderer,
+    composer,
+    THREE,
+    CFG,
+    STATE,
+    hud,
+    overlays,
+    powerups: game.powerups,
+    // Bound to THIS module's audio instance. A console `import()` of audio.js
+    // resolves to a separate Vite module copy with its own `muted` flag, so
+    // probing that one reports the wrong answer.
+    audio: { isMuted, setMuted: applyMute },
+  }
 
   if (new URLSearchParams(location.search).has('perf')) await enablePerf()
 }
@@ -229,8 +255,23 @@ const mouse = { x: 0, y: 0 }
 let last = performance.now()
 let fps = 60
 let debugOn = CFG.debug
+let powerupDebug = false
+
+// Powerup debug (F2). Grants come straight from Game.grantPowerup, so they do
+// not consume the match budget -- you can sit on one powerup for as long as it
+// takes to test it. Digits are shared with the clip inspector below, so this
+// claims them first and returns.
+const POWERUP_KEYS = {
+  Digit1: 'shield',
+  Digit2: 'permaboost',
+  Digit3: 'frostiles',
+  Digit4: 'rocketiles',
+}
 
 window.addEventListener('keydown', async (e) => {
+  // M works mid-match too -- the overlays are only reachable once you have
+  // already released the pointer.
+  if (e.code === 'KeyM') applyMute(!isMuted())
   if (e.code === 'F3') {
     e.preventDefault()
     debugOn = !debugOn
@@ -240,6 +281,26 @@ window.addEventListener('keydown', async (e) => {
     e.preventDefault()
     await enablePerf()
   }
+  if (e.code === 'F2' && game) {
+    e.preventDefault()
+    powerupDebug = !powerupDebug
+    hud.setPowerupDebug(powerupDebug)
+    if (!powerupDebug) game.player.clearPowerup()
+    return
+  }
+
+  if (powerupDebug && game) {
+    if (e.code === 'Digit0') {
+      game.player.clearPowerup()
+      return
+    }
+    const id = POWERUP_KEYS[e.code]
+    if (id) {
+      game.grantPowerup(id)
+      return
+    }
+  }
+
   // Clip inspector: with debug on, 1-5 force-play each animation solo. This is
   // the check that the shared-timeline retiming actually took -- every clip
   // must start moving immediately, with no dead pause at the front.

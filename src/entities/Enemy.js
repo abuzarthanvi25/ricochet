@@ -20,6 +20,7 @@ const UP = new THREE.Vector3(0, 1, 0)
 
 export const AI = {
   PATROL: 'PATROL',
+  COLLECT: 'COLLECT',
   ENGAGE: 'ENGAGE',
   EVADE: 'EVADE',
   HURT: 'HURT',
@@ -93,6 +94,10 @@ export class Enemy extends Bot {
     const player = game.player
     const target = player.alive ? player : null
 
+    // Permaboost, bot flavour: the dodge has no cooldown, so it can break away
+    // from every incoming shot instead of one every evadeCooldown seconds.
+    if (this.powerup === 'permaboost') this.evadeCd = 0
+
     // --- EVADE: highest priority, interrupts everything ------------------
     const threat = game.projectiles.findThreat(
       this.pos,
@@ -124,10 +129,22 @@ export class Enemy extends Bot {
       _dirTo.copy(_toTarget).multiplyScalar(1 / Math.max(dist, 1e-4))
     }
 
+    // Only four powerups exist in a whole match, so a bot with an empty slot
+    // will break off a fight to contest one. It keeps shooting on the way --
+    // COLLECT changes where it flies, not whether it fights.
+    const pickup = this.powerup
+      ? null
+      : game.powerups.nearestAvailable(this.pos, CFG.powerups.seekRadius)
+
     if (this.evadeHold > 0) {
       // Keep coasting the dodge for a beat instead of instantly re-engaging.
       _steer.copy(this.vel).normalize()
       if (target) this.aimDir.copy(_dirTo)
+    } else if (pickup) {
+      this.state = AI.COLLECT
+      _steer.subVectors(pickup.group.position, this.pos).normalize()
+      if (target && dist < diff.engageRange) this.aimDir.copy(_dirTo)
+      else this.aimDir.copy(_steer)
     } else if (target && dist < diff.engageRange) {
       // Entering ENGAGE starts a short reaction delay, so a bot that has just
       // spotted you cannot fire on the same frame it turns to face you.
@@ -247,7 +264,9 @@ export class Enemy extends Bot {
     if (!segmentClear(_muzzle, target.pos, _losBlockers)) return
 
     // Lead the shot. If the target somehow outruns the projectile, aim direct.
-    const t = interceptTime(_muzzle, target.pos, target.vel, CFG.proj.speed)
+    // Uses this bot's own muzzle velocity: a permaboosted bot fires faster, and
+    // solving with the nominal speed would make it consistently over-lead.
+    const t = interceptTime(_muzzle, target.pos, target.vel, this.projSpeed())
     if (t > 0 && t < 4) _aimAt.copy(target.pos).addScaledVector(target.vel, t)
     else _aimAt.copy(target.pos)
 

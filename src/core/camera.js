@@ -60,6 +60,11 @@ export class CameraRig {
     this.fovTarget = boosting ? CFG.camera.fovBoost : CFG.camera.fov
   }
 
+  /** Explicit target, for states that sit between resting and full boost. */
+  setFov(fov) {
+    this.fovTarget = fov
+  }
+
   update(dt, target, arena) {
     this._rebuildBasis()
 

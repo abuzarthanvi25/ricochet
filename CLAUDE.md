@@ -21,10 +21,29 @@ npm run format    # prettier --write
 ```
 
 Node 18+ (developed on 24.12). `?perf` or `F4` in-game opens stats-gl + lil-gui.
+`F2` is powerup debug: `1`–`4` grant any powerup, `0` clears. Grants bypass the
+4-per-match budget. It claims the digits, so the `F3` clip inspector is off while
+it is on.
 
 Formatting is Prettier's (no semicolons, single quotes, 100 cols); ESLint covers
 correctness only, with every stylistic rule disabled by `eslint-config-prettier`.
 Do not hand-format — run `npm run format`.
+
+## Branching
+
+`develop` is the integration branch. Branch from `develop` and target it with
+PRs — never commit straight to `main` or `develop`, and never open a PR against
+`main`. `main` only receives `release/*` and `hotfix/*` merges.
+
+```bash
+git checkout develop && git pull
+git checkout -b feat/thing
+gh pr create --base develop
+```
+
+Conventional-commit prefixes (`feat:` `fix:` `perf:` `docs:` `chore:`). Put
+before/after numbers in the body for anything behavioural, and update
+`CHANGELOG.md` under `[Unreleased]` for anything a player would notice.
 
 ## Architecture
 
@@ -40,6 +59,7 @@ core/
   camera.js    chase rig, occlusion, crosshair aim ray
   arena.js     wall box + drifting debris
   difficulty.js presets + localStorage
+  powerups.js  registry + the pickups floating in the arena
 entities/      Bot (shared base) -> Player, Enemy
 weapons/projectiles.js   stepping, bouncing, arming — the core mechanic
 fx/            explosions, shared light pool, synthesised audio
@@ -89,6 +109,39 @@ opposite. Use `orientToDirection()` from `core/util.js`. The model itself faces
 **Bots clamp, projectiles bounce.** Bouncing the thing the player steers feels
 like losing control; bots only get inward velocity cancelled.
 
+**Rocketile homing runs once per frame, BEFORE the sweep — never inside it.**
+That is the entire reason the analytic guarantee survives a guided projectile:
+within any one frame the path is still a straight segment. `npm test` fires 200
+homing rocketiles at 400 u/s with the seeker pulling hard and asserts none
+escape. If you move the steering into the bounce loop, that test is what catches
+it.
+
+**The shield only reflects from outside.** `raySphere` returns the _exit_ point
+when the origin is inside a sphere, so reflecting there on an outward normal
+fires the shot back in and traps it forever. A projectile caught inside a bubble
+must fall through to the body — `weapons/projectiles.js` guards this explicitly.
+
+**Projectile speed lives on the projectile, not in `CFG.proj.speed`.** Permaboost
+multiplies it, so `p.speed` is captured at spawn and used by both the sweep and
+the homing steer. `Enemy._tryFire` must solve the intercept with `this.projSpeed()`
+or a permaboosted bot over-leads every shot.
+
+**Frostile slow and permaboost are separate multipliers** (`speedMul` and
+`powerMul`) that multiply in `integrate()`. Collapsing them into one field means
+whichever effect landed last silently cancels the other.
+
+**Set `InstancedMesh.count` to what is actually live.** Parking dead instances
+off-screen still submits them: the projectile pools were drawing 14,592
+triangles of nothing every frame. `count` is a draw-call argument, not part of
+the program key, so writing it per frame is free. Debris instances have
+`frustumCulled = false` because three.js caches an `InstancedMesh` bounding
+sphere on first cull and never recomputes it — the instances drift, so a stale
+sphere makes them vanish.
+
+**Additive + `toneMapped: false` feeds bloom directly.** Opacities that look
+sane on paper blow out to solid white: the shield started at 0.1/0.45 and hid
+the bot entirely. Shield and pickup materials sit at 0.03–0.28 for that reason.
+
 ## Conventions
 
 - Frame-rate independent: `Math.pow(k, dt)` for damping, `1 - Math.exp(-rate*dt)`
@@ -121,6 +174,13 @@ Two traps that will waste your time:
 - **Monkeypatches survive `game.reset()`.** Setting `e.canFire = () => false` on
   an enemy creates an own-property that `reset()` does not clear. Reload the page
   between scenarios, or results will silently be wrong.
+
+**GPU timing in a driven tab is noisy.** Wall-clock drifts several ms between
+runs, and `performance.now()` around `composer.render()` measures CPU submission,
+not GPU work. Use `EXT_disjoint_timer_query_webgl2`, issue the queries in one
+`evaluate` call and read them in the next (they need an event-loop turn to
+retire), and **interleave A/B frame-by-frame** so drift hits both arms equally.
+Absolute cross-run comparisons are not trustworthy here; interleaved deltas are.
 
 For perf work, watch `renderer.info.programs.length`. If it climbs during play,
 something is recompiling shaders — that is the top suspect for any stutter here.

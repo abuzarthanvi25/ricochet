@@ -2,6 +2,11 @@ import * as THREE from 'three'
 import { CFG, HALF } from '../config.js'
 import { rand, randomDirection } from './util.js'
 
+// Module-scope scratch: arena.update runs every frame over every debris.
+const _mat4 = new THREE.Matrix4()
+const _quat = new THREE.Quaternion()
+const _scale = new THREE.Vector3()
+
 /** Grid decal painted onto the wall interiors, generated at runtime. */
 function makeGridTexture() {
   const S = 256
@@ -70,10 +75,14 @@ export class Arena {
       const tex = base.clone()
       tex.needsUpdate = true
       tex.repeat.set(ru, rv)
-      return new THREE.MeshStandardMaterial({
+      // Lambert, not Standard. The walls are a BackSide box the camera sits
+      // inside, so they cover essentially every pixel -- the most overdrawn
+      // surface in the game by a wide margin. At roughness 0.85 / metalness
+      // 0.15 the PBR BRDF was buying almost nothing over plain diffuse, and an
+      // interleaved A/B measured the swap at -2.2ms of GPU time per frame.
+      // They still light up from passing projectiles, which is the point.
+      return new THREE.MeshLambertMaterial({
         color: 0x0b1420,
-        roughness: 0.85,
-        metalness: 0.15,
         side: THREE.BackSide,
         emissive: 0x1a4a66,
         emissiveMap: tex,
@@ -93,6 +102,15 @@ export class Arena {
     this.edges = edges
   }
 
+  /**
+   * Debris are drawn as one InstancedMesh per shape rather than one Mesh each.
+   * They already shared a single material, so 25 separate meshes bought nothing
+   * but 25 draw calls; grouped by geometry that becomes at most 7, and usually
+   * fewer since a shape with no instances is skipped entirely.
+   *
+   * Collision is untouched: `pos` and `radius` stay plain data on the debris
+   * record, which is all core/collision.js ever reads.
+   */
   _buildDebris() {
     const geoCache = DEBRIS_SHAPES.map((f) => {
       const g = f()
@@ -100,39 +118,59 @@ export class Arena {
       return g
     })
 
-    const material = new THREE.MeshStandardMaterial({
+    // Lambert for the same reason as the walls: roughness 0.95 is diffuse in
+    // all but name, and flat-shaded rock gains nothing from a PBR BRDF.
+    const material = new THREE.MeshLambertMaterial({
       color: 0x2a3646,
-      roughness: 0.95,
-      metalness: 0.25,
       emissive: 0x0e2233,
       emissiveIntensity: 0.6,
       flatShading: true,
     })
 
+    // Assign shapes first so each InstancedMesh can be sized exactly.
+    const picks = []
+    const perShape = new Array(geoCache.length).fill(0)
     for (let i = 0; i < CFG.debris.count; i++) {
-      const radius = rand(CFG.debris.minR, CFG.debris.maxR)
       const gi = Math.floor(Math.random() * geoCache.length)
+      picks.push(gi)
+      perShape[gi]++
+    }
+
+    this.debrisMeshes = geoCache.map((geo, gi) => {
+      const mesh = new THREE.InstancedMesh(geo, material, Math.max(1, perShape[gi]))
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+      mesh.count = perShape[gi]
+      // three.js caches an InstancedMesh's bounding sphere on first cull and
+      // never recomputes it. These instances drift every frame, so a cached
+      // sphere goes stale and debris would start popping out of existence.
+      // Each group is spread across the whole arena and would almost never cull
+      // anyway -- 7 unconditional draws is the cheaper, correct trade.
+      mesh.frustumCulled = false
+      this.scene.add(mesh)
+      return mesh
+    })
+
+    const written = new Array(geoCache.length).fill(0)
+    for (let i = 0; i < CFG.debris.count; i++) {
+      const gi = picks[i]
       const geo = geoCache[gi]
-
-      const mesh = new THREE.Mesh(geo, material)
-      // Normalise every shape so its bounding sphere is exactly `radius` --
-      // that sphere IS the collider, so the visual must match it.
-      mesh.scale.setScalar(radius / geo.boundingSphere.radius)
-
+      const radius = rand(CFG.debris.minR, CFG.debris.maxR)
       const pos = this._findDebrisSpot(radius)
-      mesh.position.copy(pos)
-      mesh.rotation.set(rand(0, Math.PI), rand(0, Math.PI), rand(0, Math.PI))
 
       const d = CFG.debris.driftMax
       const spin = CFG.debris.spinMax
       this.debris.push({
-        mesh,
+        mesh: this.debrisMeshes[gi],
+        slot: written[gi]++,
         pos,
         radius,
+        // Normalise every shape so its bounding sphere is exactly `radius` --
+        // that sphere IS the collider, so the visual must match it.
+        scale: radius / geo.boundingSphere.radius,
+        rot: new THREE.Euler(rand(0, Math.PI), rand(0, Math.PI), rand(0, Math.PI)),
         vel: randomDirection().multiplyScalar(rand(0.15, d)),
         spin: new THREE.Vector3(rand(-spin, spin), rand(-spin, spin), rand(-spin, spin)),
       })
-      this.scene.add(mesh)
     }
   }
 
@@ -185,10 +223,18 @@ export class Arena {
         d.vel.z *= -1
       }
 
-      d.mesh.position.copy(d.pos)
-      d.mesh.rotation.x += d.spin.x * dt
-      d.mesh.rotation.y += d.spin.y * dt
-      d.mesh.rotation.z += d.spin.z * dt
+      d.rot.x += d.spin.x * dt
+      d.rot.y += d.spin.y * dt
+      d.rot.z += d.spin.z * dt
+
+      _quat.setFromEuler(d.rot)
+      _scale.setScalar(d.scale)
+      _mat4.compose(d.pos, _quat, _scale)
+      d.mesh.setMatrixAt(d.slot, _mat4)
+    }
+
+    for (const m of this.debrisMeshes) {
+      if (m.count) m.instanceMatrix.needsUpdate = true
     }
   }
 

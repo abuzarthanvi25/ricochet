@@ -6,11 +6,16 @@
  * ricochet coming before you see it.
  */
 
+const STORAGE_KEY = 'ricochet.muted'
+const VOLUME = 0.35
+
 let ctx = null
 let master = null
 let enabled = true
+let muted = false
 
 export function initAudio() {
+  muted = loadMuted()
   if (ctx) return
   const AC = window.AudioContext || window.webkitAudioContext
   if (!AC) {
@@ -19,8 +24,36 @@ export function initAudio() {
   }
   ctx = new AC()
   master = ctx.createGain()
-  master.gain.value = 0.35
+  master.gain.value = muted ? 0 : VOLUME
   master.connect(ctx.destination)
+}
+
+function loadMuted() {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === '1'
+  } catch {
+    // localStorage throws in private mode; unmuted is the right default.
+    return false
+  }
+}
+
+export const isMuted = () => muted
+
+/**
+ * Muting zeroes the master gain AND short-circuits every voice before it is
+ * built. The gain alone would silence the game while still allocating an
+ * oscillator, a gain node and an envelope per bounce -- during a busy fight
+ * that is dozens of nodes a second of pure waste.
+ */
+export function setMuted(on) {
+  muted = !!on
+  if (master) master.gain.value = muted ? 0 : VOLUME
+  try {
+    localStorage.setItem(STORAGE_KEY, muted ? '1' : '0')
+  } catch {
+    /* non-fatal */
+  }
+  return muted
 }
 
 export function resumeAudio() {
@@ -42,7 +75,7 @@ function envGain(attack, decay, peak = 1) {
 }
 
 function tone({ type = 'sine', from, to, attack = 0.005, decay = 0.15, peak = 0.6, detune = 0 }) {
-  if (!ctx || !enabled) return
+  if (!ctx || !enabled || muted) return
   const osc = ctx.createOscillator()
   osc.type = type
   osc.detune.value = detune
@@ -66,7 +99,7 @@ function noise({
   filterTo = 200,
   q = 1,
 }) {
-  if (!ctx || !enabled) return
+  if (!ctx || !enabled || muted) return
   if (!noiseBuffer) {
     const len = ctx.sampleRate * 1.0
     noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate)
@@ -171,6 +204,42 @@ export const sfx = {
 
   boost() {
     tone({ type: 'sawtooth', from: 140, to: 620, attack: 0.02, decay: 0.22, peak: 0.22 })
+  },
+
+  /** Shot deflected by a shield. Deliberately metallic and unlike a wall bounce. */
+  shieldHit(dist = 0) {
+    const g = gainFor(dist, 55)
+    if (g <= 0.02) return
+    if (!takeVoice('shield', 3)) return
+    tone({ type: 'sine', from: 1500, to: 900, attack: 0.002, decay: 0.14, peak: 0.26 * g })
+    tone({ type: 'triangle', from: 2300, to: 1700, attack: 0.002, decay: 0.09, peak: 0.14 * g })
+  },
+
+  powerUp() {
+    ;[660, 880, 1320].forEach((f, i) => {
+      setTimeout(
+        () =>
+          tone({ type: 'square', from: f, to: f * 1.02, attack: 0.008, decay: 0.16, peak: 0.2 }),
+        i * 70
+      )
+    })
+  },
+
+  /** A bot took one. Quieter and lower -- you should notice, not celebrate. */
+  powerUpRemote(dist = 0) {
+    const g = gainFor(dist, 70)
+    if (g <= 0.02) return
+    tone({ type: 'triangle', from: 440, to: 660, attack: 0.01, decay: 0.22, peak: 0.16 * g })
+  },
+
+  powerDown() {
+    tone({ type: 'square', from: 880, to: 300, attack: 0.006, decay: 0.28, peak: 0.18 })
+  },
+
+  /** Frostile landed on you. Descending and brittle -- the opposite of powerUp. */
+  freeze() {
+    tone({ type: 'triangle', from: 1800, to: 420, attack: 0.004, decay: 0.45, peak: 0.24 })
+    noise({ attack: 0.002, decay: 0.3, peak: 0.16, filterFrom: 7000, filterTo: 2200, q: 4 })
   },
 
   warn() {

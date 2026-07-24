@@ -42,8 +42,20 @@ npm run dev      # http://localhost:5173
 | Mouse              | Aim                                                               |
 | Left mouse         | Fire                                                              |
 | `Esc`              | Release the pointer (pauses)                                      |
+| `M`                | Mute / unmute (also a button on the title and pause screens)      |
+| `F2`               | Powerup debug — with it on, `1`–`4` grant any powerup, `0` clears |
 | `F3`               | Debug overlay — with it on, `1`–`5` play each animation clip solo |
 | `F4`               | Performance overlay (also via `?perf` in the URL)                 |
+
+`F2` exists to test a powerup without waiting for one of the four a match gets.
+Grants do not consume the match budget and re-pressing a key refreshes the timer,
+so you can sit on one for as long as you need. It claims the digit keys while
+active, so the `F3` clip inspector is unavailable until you switch it back off —
+which also drops whatever you were holding.
+
+The key legend appears on both the title screen and the pause menu, and the
+powerup legend on the title screen. Both are built once in `ui/overlays.js` and
+injected into every screen that asks for them, so they cannot drift apart.
 
 Ascend/descend stay locked to world axes on purpose. That single decision is
 what keeps 6-DOF flight readable instead of nauseating — "up" never rotates out
@@ -91,6 +103,47 @@ Deathmatch to **15** against **4** bots that respawn 3s after death.
 | Your own ricochet kills you | You −1 (floor 0)                         |
 | A bot kills another bot     | No score — but it shows in the kill feed |
 
+## Powerups
+
+**Four spawn in an entire match.** Not four at a time — four, total, one of each
+type in a shuffled order. Everyone contests them: you and all four bots. One
+slot each and no swapping, so while you are holding something you fly straight
+through pickups and leave them for somebody else. Everything expires on the same
+8-second clock, shown bottom-left as a glyph inside a draining ring.
+
+| Powerup        | Effect                                                    | What the ricochet rule does to it                                                     |
+| -------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **SHIELD**     | 2.4-unit bubble; shots reflect off you instead of hitting | A reflection is a bounce — the shot comes off **armed against the bot that fired it** |
+| **PERMABOOST** | Everything speeds up — see below                          | Bots get the same deal: their evade stops having a cooldown                           |
+| **FROSTILES**  | Direct hits drop the target to 0.4× speed for 2.5s        | Your own returning ricochet freezes **you**                                           |
+| **ROCKETILES** | Magenta cones that hunt the nearest bot within 22 units   | Once bounced, the nearest bot might be you                                            |
+
+**Permaboost is a whole-loadout buff**, not just a cooldown removal:
+
+|                      | Multiplier |
+| -------------------- | ---------- |
+| Thrust and top speed | **1.45×**  |
+| Projectile speed     | **1.35×**  |
+| Dash impulse         | **1.5×**   |
+| Dash cooldown        | removed    |
+
+It also holds the camera at 82° FOV for its duration, so the speed reads on
+screen rather than only in the numbers. Faster shots mean less lead to give and
+less time for a bot to dodge — but they also come back off the wall sooner.
+
+The **frostile** slow is a separate multiplier from permaboost's, so the two
+stack: frozen while permaboosted leaves you at 1.45 × 0.4 = **0.58×**, slow but
+not helpless. Taking a frostile puts a blue rime around the screen edge and a
+`SYSTEMS FROZEN` readout above the crosshair — deliberately blue and
+edge-weighted so it is never confused with the red damage vignette.
+
+The shield is a convex mirror, not a retro-reflector — an off-centre hit
+scatters. It saves you reliably; it kills the shooter only when they hit you
+square on.
+
+Bots break off to grab a pickup within 22 units and their nameplate shows what
+they are carrying. Die and you drop it.
+
 ## Difficulty
 
 Selectable from the title screen **and** the pause menu, applied live without a
@@ -133,10 +186,11 @@ src/
     camera.js      third-person rig, occlusion, aim ray
     assets.js      GLB load, clip retiming, per-bot model factory
     difficulty.js  presets and persistence
+    powerups.js    registry + the pickups floating in the arena
     input.js       pointer lock, keys, mouse deltas
     util.js        math helpers
   entities/        Bot (shared) -> Player, Enemy
-  weapons/         projectiles.js — stepping, bouncing, arming
+  weapons/         projectiles.js — stepping, bouncing, arming, homing
   fx/              explosions, shared light pool, synthesised audio
   ui/              hud, overlays, world-space nameplates
   dev/perf.js      stats-gl + lil-gui, lazy-loaded
@@ -163,6 +217,12 @@ body, so each instance is re-centred at load.
 **Collision is fully analytic** — exact per-axis solves against the arena box,
 ray/sphere for debris and bots. There is no substepping, so projectile speed
 cannot cause tunnelling. `npm test` fires 200 shots at 400 u/s to prove it.
+
+**Rocketile homing steers once per frame, before the sweep.** That is what lets
+a guided projectile keep the analytic guarantee: within any single frame its
+path is still a straight segment. Move the steering into the bounce loop and it
+will tunnel — `npm test` fires 200 homing rocketiles at 400 u/s for exactly this
+reason.
 
 **Bots clamp, projectiles bounce.** Bouncing the thing you are steering feels
 like losing control, so bots only have their inward velocity cancelled.

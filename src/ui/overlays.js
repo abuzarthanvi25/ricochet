@@ -1,6 +1,27 @@
 import { DIFFICULTIES } from '../core/difficulty.js'
+import { POWERUPS } from '../core/powerups.js'
 
 const $ = (id) => document.getElementById(id)
+const hex = (n) => `#${n.toString(16).padStart(6, '0')}`
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+/**
+ * One definition, rendered onto both the title screen and the pause menu. Two
+ * copies of this in the HTML is how they end up disagreeing after a rebind.
+ */
+const CONTROL_COLUMNS = [
+  [
+    { keys: ['W', 'A', 'S', 'D'], label: 'Thrust' },
+    { keys: ['Space'], label: 'Ascend' },
+    { keys: ['Shift'], label: 'Descend' },
+  ],
+  [
+    { keys: ['Q'], alt: 'RMB', label: 'Boost dash' },
+    { keys: ['Mouse'], label: 'Aim' },
+    { keys: ['LMB'], label: 'Fire' },
+    { keys: ['Esc'], label: 'Pause' },
+  ],
+]
 
 export class Overlays {
   constructor() {
@@ -20,8 +41,117 @@ export class Overlays {
     this.btnPlay.disabled = true
 
     this.diffGroups = [...document.querySelectorAll('[data-difficulty-group]')]
+    this.controlGroups = [...document.querySelectorAll('[data-controls-group]')]
+    this.powerupGroups = [...document.querySelectorAll('[data-powerup-group]')]
+    this.soundGroups = [...document.querySelectorAll('[data-sound-group]')]
     this._onDifficultyPick = null
+    this._onSoundToggle = null
     this._buildDifficultyControls()
+    this._buildControls()
+    this._buildPowerupGuide()
+    this._buildSoundToggle()
+  }
+
+  /** Same toggle on the title screen and the pause menu. */
+  _buildSoundToggle() {
+    for (const group of this.soundGroups) {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'sound-btn'
+
+      const icon = document.createElementNS(SVG_NS, 'svg')
+      icon.setAttribute('class', 'sound-icon')
+      icon.setAttribute('viewBox', '0 0 24 24')
+      const use = document.createElementNS(SVG_NS, 'use')
+      use.setAttribute('href', '#gl-sound-on')
+      icon.appendChild(use)
+
+      const label = document.createElement('span')
+      label.textContent = 'SOUND'
+
+      btn.append(icon, label)
+      btn.addEventListener('click', (e) => {
+        e.currentTarget.blur()
+        this._onSoundToggle?.()
+      })
+      group.appendChild(btn)
+    }
+  }
+
+  onSoundToggle(fn) {
+    this._onSoundToggle = fn
+  }
+
+  setMuted(on) {
+    for (const group of this.soundGroups) {
+      const btn = group.querySelector('.sound-btn')
+      btn.classList.toggle('muted', on)
+      btn.querySelector('use').setAttribute('href', on ? '#gl-sound-off' : '#gl-sound-on')
+      btn.querySelector('span').textContent = on ? 'SOUND OFF' : 'SOUND ON'
+    }
+  }
+
+  /** Same key legend on the title screen and the pause menu. */
+  _buildControls() {
+    for (const group of this.controlGroups) {
+      for (const column of CONTROL_COLUMNS) {
+        const col = document.createElement('div')
+        col.className = 'ctrl-col'
+
+        for (const entry of column) {
+          const row = document.createElement('div')
+          row.className = 'ctrl'
+
+          for (const k of entry.keys) {
+            const kbd = document.createElement('kbd')
+            kbd.textContent = k
+            row.appendChild(kbd)
+          }
+          if (entry.alt) {
+            const kbd = document.createElement('kbd')
+            kbd.className = 'alt'
+            kbd.textContent = entry.alt
+            row.appendChild(kbd)
+          }
+
+          const label = document.createElement('span')
+          label.textContent = entry.label
+          row.appendChild(label)
+          col.appendChild(row)
+        }
+        group.appendChild(col)
+      }
+    }
+  }
+
+  /** Powerup legend, straight off the registry so it cannot go stale. */
+  _buildPowerupGuide() {
+    for (const group of this.powerupGroups) {
+      const list = group.querySelector('.pg-list')
+      for (const p of Object.values(POWERUPS)) {
+        const row = document.createElement('div')
+        row.className = 'pg-row'
+        row.style.color = hex(p.color)
+
+        const icon = document.createElementNS(SVG_NS, 'svg')
+        icon.setAttribute('class', 'pg-icon')
+        icon.setAttribute('viewBox', '0 0 24 24')
+        const use = document.createElementNS(SVG_NS, 'use')
+        use.setAttribute('href', `#${p.glyph}`)
+        icon.appendChild(use)
+
+        const name = document.createElement('span')
+        name.className = 'pg-name'
+        name.textContent = p.label
+
+        const blurb = document.createElement('span')
+        blurb.className = 'pg-blurb'
+        blurb.textContent = p.blurb
+
+        row.append(icon, name, blurb)
+        list.appendChild(row)
+      }
+    }
   }
 
   /** Same selector rendered on the title and pause screens; one source of truth. */
