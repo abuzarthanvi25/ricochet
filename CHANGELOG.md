@@ -9,6 +9,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.3.0] — 2026-07-24
+
 A newcomer-experience pass — softening the landing for a first-time player who
 found the game too punishing even on the old easiest tier — plus a set of new
 combat mechanics: floating mines, shots that ricochet off each other, and a
@@ -359,6 +363,7 @@ Three asset quirks handled at load, documented in `core/assets.js`:
 
 Model: **Shooter Bot** by Aurantiko, CC-BY-4.0, via Sketchfab.
 
-[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/v0.2.0...develop
+[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/v0.3.0...develop
+[0.3.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.3.0
 [0.2.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.2.0
 [0.1.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.1.0
