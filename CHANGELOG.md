@@ -9,7 +9,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Merged to `develop`, not yet released to `main`.
+_Nothing yet._
+
+## [0.2.0] — 2026-07-24
 
 ### Added
 
@@ -273,5 +275,6 @@ Three asset quirks handled at load, documented in `core/assets.js`:
 
 Model: **Shooter Bot** by Aurantiko, CC-BY-4.0, via Sketchfab.
 
-[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/main...develop
+[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/v0.2.0...develop
+[0.2.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.2.0
 [0.1.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.1.0
