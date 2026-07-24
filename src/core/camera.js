@@ -25,6 +25,8 @@ export class CameraRig {
     this.fovTarget = CFG.camera.fov
     this.snapNext = true
     this.shake = 0
+    // Player-set look-speed multiplier over the base sensitivity. 1 = default.
+    this.sensitivityMul = 1
   }
 
   addShake(amount) {
@@ -41,7 +43,7 @@ export class CameraRig {
   }
 
   applyMouse(dx, dy) {
-    const s = CFG.camera.mouseSensitivity
+    const s = CFG.camera.mouseSensitivity * this.sensitivityMul
     this.yaw -= dx * s
     this.pitch -= dy * s
     const lim = THREE.MathUtils.degToRad(CFG.camera.pitchClampDeg)

@@ -20,6 +20,22 @@ import { Game, STATE } from './core/game.js'
 import { Hud } from './ui/hud.js'
 import { Overlays } from './ui/overlays.js'
 import { initAudio, resumeAudio, isMuted, setMuted } from './fx/audio.js'
+import {
+  loadFlightAssist,
+  saveFlightAssist,
+  loadAimAssist,
+  saveAimAssist,
+  loadSensitivity,
+  saveSensitivity,
+  getProjSpeedMul,
+  setProjSpeedMul,
+  loadBloom,
+  saveBloom,
+} from './core/settings.js'
+
+// Styles are applied by the time this module runs, so drop the anti-FOUC guard
+// (see index.html) and reveal the fully-styled page.
+document.documentElement.classList.remove('preload')
 
 const canvas = document.getElementById('scene')
 
@@ -52,8 +68,11 @@ const camera = new THREE.PerspectiveCamera(
 )
 
 // Ambient fill plus two cool rim lights; the dynamic light pool does the rest.
-scene.add(new THREE.AmbientLight(0x4a6a88, 0.55))
-const key = new THREE.DirectionalLight(0x9fd8ff, 1.1)
+// Ambient + key nudged up with the larger arena: these are constant lights whose
+// intensity is a plain uniform, so brightening them costs nothing and does not
+// touch the visible light count the shader program key is baked from.
+scene.add(new THREE.AmbientLight(0x4a6a88, 0.7))
+const key = new THREE.DirectionalLight(0x9fd8ff, 1.3)
 key.position.set(0.4, 1, 0.3)
 scene.add(key)
 const rim = new THREE.DirectionalLight(0xff6688, 0.4)
@@ -107,6 +126,56 @@ function applyMute(on) {
 }
 overlays.onSoundToggle(() => applyMute(!isMuted()))
 applyMute(isMuted())
+
+// Flight assist, aim assist and sensitivity persist across sessions. The cached
+// values below are the source of truth for the option controls before `game`
+// exists; boot() copies them onto the game once it is built.
+let flightAssistOn = loadFlightAssist()
+let aimAssistOn = loadAimAssist()
+let sensitivity = loadSensitivity()
+
+function applyFlightAssist(on) {
+  flightAssistOn = on
+  if (game) game.player.flightAssist = on
+  saveFlightAssist(on)
+  overlays.setFlightAssist(on)
+}
+function applyAimAssist(on) {
+  aimAssistOn = on
+  if (game) game.aimAssistEnabled = on
+  saveAimAssist(on)
+  overlays.setAimAssist(on)
+}
+function applySensitivity(mul) {
+  sensitivity = mul
+  if (game) game.rig.sensitivityMul = mul
+  saveSensitivity(mul)
+  overlays.setSensitivity(mul)
+}
+// Projectile speed lives entirely in settings.js (Bot.projSpeed reads it), so
+// it needs no `game` reference and can apply before boot.
+function applyProjSpeed(mul) {
+  overlays.setProjSpeed(setProjSpeedMul(mul))
+}
+// Bloom is a composer pass -- `enabled = false` skips it (no material recompile,
+// so toggling is free and safe). Big GPU saver on low-end machines.
+let bloomOn = loadBloom()
+function applyBloom(on) {
+  bloomOn = on
+  bloom.enabled = on
+  saveBloom(on)
+  overlays.setBloom(on)
+}
+overlays.onFlightAssistToggle(() => applyFlightAssist(!flightAssistOn))
+overlays.onAimAssistToggle(() => applyAimAssist(!aimAssistOn))
+overlays.onSensitivityChange((m) => applySensitivity(m))
+overlays.onProjSpeedChange((m) => applyProjSpeed(m))
+overlays.onBloomToggle(() => applyBloom(!bloomOn))
+applyFlightAssist(flightAssistOn)
+applyAimAssist(aimAssistOn)
+applySensitivity(sensitivity)
+applyProjSpeed(getProjSpeedMul())
+applyBloom(bloomOn)
 
 overlays.bind({
   onPlay: () => beginMatch(true),
@@ -200,6 +269,10 @@ async function boot() {
   }
 
   game = new Game({ scene, camera, hud, overlays })
+  // Copy the stored options onto the freshly built game.
+  game.player.flightAssist = flightAssistOn
+  game.aimAssistEnabled = aimAssistOn
+  game.rig.sensitivityMul = sensitivity
   game.onMatchEnd = (result, score) => {
     releaseLock()
     hud.hide()
@@ -244,6 +317,13 @@ async function boot() {
     // resolves to a separate Vite module copy with its own `muted` flag, so
     // probing that one reports the wrong answer.
     audio: { isMuted, setMuted: applyMute },
+    options: {
+      setFlightAssist: applyFlightAssist,
+      setAimAssist: applyAimAssist,
+      setSensitivity: applySensitivity,
+      setProjSpeed: applyProjSpeed,
+      setBloom: applyBloom,
+    },
   }
 
   if (new URLSearchParams(location.search).has('perf')) await enablePerf()
@@ -272,6 +352,11 @@ window.addEventListener('keydown', async (e) => {
   // M works mid-match too -- the overlays are only reachable once you have
   // already released the pointer.
   if (e.code === 'KeyM') applyMute(!isMuted())
+  // X toggles flight assist mid-flight; the HUD flashes the new state.
+  if (e.code === 'KeyX') {
+    applyFlightAssist(!flightAssistOn)
+    hud.flashAssist(flightAssistOn)
+  }
   if (e.code === 'F3') {
     e.preventDefault()
     debugOn = !debugOn

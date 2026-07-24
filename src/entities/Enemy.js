@@ -59,6 +59,11 @@ export class Enemy extends Bot {
     this.maxSpeed = diff.maxSpeed
     this.accel = diff.accel
     this.fireCooldown = diff.fireCooldown
+    // Easy tiers make bots less tanky (34 dmg/hit, so botHp 50 => two hits).
+    // Clamp current hp in case difficulty drops mid-match; spawnAt refills from
+    // this on the next respawn.
+    this.maxHp = diff.botHp
+    if (this.hp > this.maxHp) this.hp = this.maxHp
   }
 
   spawnAt(pos) {

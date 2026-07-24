@@ -11,6 +11,12 @@ const _seek = new THREE.Vector3()
 const _axis = new THREE.Vector3()
 const _mat4 = new THREE.Matrix4()
 const _scaleV = new THREE.Vector3(1, 1, 1)
+// Scratch for the swept projectile-vs-projectile pass.
+const _cpa = new THREE.Vector3()
+const _cpb = new THREE.Vector3()
+const _cr = new THREE.Vector3()
+const _cw = new THREE.Vector3()
+const _cn = new THREE.Vector3()
 const _quat = new THREE.Quaternion()
 const _quatR = new THREE.Quaternion()
 const _upY = new THREE.Vector3(0, 1, 0)
@@ -87,6 +93,9 @@ export class ProjectileSystem {
         // fly faster, so speed has to travel with the shot.
         speed: CFG.proj.speed,
         pos: new THREE.Vector3(),
+        // Position at the start of the frame, so the projectile-vs-projectile
+        // pass can test the swept segment and never tunnel a crossing.
+        prevPos: new THREE.Vector3(),
         vel: new THREE.Vector3(),
         age: 0,
         bounces: 0,
@@ -149,6 +158,7 @@ export class ProjectileSystem {
     p.mod = mod
     p.speed = speed
     p.pos.copy(origin)
+    p.prevPos.copy(origin)
     p.vel.copy(dir).normalize().multiplyScalar(speed)
     p.age = 0
     p.bounces = 0
@@ -239,6 +249,10 @@ export class ProjectileSystem {
   }
 
   update(dt, game) {
+    // Snapshot start-of-frame positions before anything moves, so the collision
+    // pass below sees each projectile's full swept segment for this frame.
+    for (const p of this.active) p.prevPos.copy(p.pos)
+
     for (let i = this.active.length - 1; i >= 0; i--) {
       const p = this.active[i]
       const outcome = this._step(p, dt, game)
@@ -257,8 +271,96 @@ export class ProjectileSystem {
       }
     }
 
+    this._resolveCollisions(game)
     this._writeInstances()
     this._writeTrailBuffer()
+  }
+
+  /**
+   * Projectile-vs-projectile ricochet. Two shots that cross within
+   * `CFG.proj.crossRadius` during this frame deflect off each other, and each
+   * counts as a bounce -- so both arm against their own shooters, which is what
+   * makes a deliberate mid-air deflection a real tactic (and a real risk).
+   *
+   * Detection is the closest approach of the two swept segments prevPos->pos, so
+   * a crossing is caught even when the end-of-frame positions no longer overlap;
+   * it never tunnels. Runs once per frame AFTER the sweeps, so it cannot disturb
+   * the exact wall/debris/bot no-tunnelling guarantee those depend on.
+   */
+  _resolveCollisions(game) {
+    const active = this.active
+    const n = active.length
+    if (n < 2) return
+
+    const contact = CFG.proj.crossRadius
+    const contactSq = contact * contact
+    const hits = this._collisionScratch || (this._collisionScratch = [])
+    hits.length = 0
+
+    for (let i = 0; i < n; i++) {
+      const a = active[i]
+      for (let j = i + 1; j < n; j++) {
+        const b = active[j]
+        _cr.subVectors(a.prevPos, b.prevPos) // separation at frame start
+        _cw.set(
+          a.pos.x - a.prevPos.x - (b.pos.x - b.prevPos.x),
+          a.pos.y - a.prevPos.y - (b.pos.y - b.prevPos.y),
+          a.pos.z - a.prevPos.z - (b.pos.z - b.prevPos.z)
+        ) // relative displacement over the frame
+        const wl = _cw.lengthSq()
+        const s = wl > 1e-12 ? clamp(-_cr.dot(_cw) / wl, 0, 1) : 0
+        const mx = _cr.x + _cw.x * s
+        const my = _cr.y + _cw.y * s
+        const mz = _cr.z + _cw.z * s
+        if (mx * mx + my * my + mz * mz > contactSq) continue
+        hits.push({ a, b, s })
+      }
+    }
+    if (!hits.length) return
+
+    // Earliest crossings first; a projectile may only ricochet off one partner
+    // per frame, so a triple-crossing resolves the closest pair and defers.
+    hits.sort((x, y) => x.s - y.s)
+    const resolved = this._resolvedSet || (this._resolvedSet = new Set())
+    resolved.clear()
+    for (const h of hits) {
+      if (resolved.has(h.a) || resolved.has(h.b)) continue
+      this._deflect(h.a, h.b, h.s, game)
+      resolved.add(h.a)
+      resolved.add(h.b)
+    }
+  }
+
+  _deflect(a, b, s, game) {
+    _cpa.copy(a.prevPos).lerp(a.pos, s)
+    _cpb.copy(b.prevPos).lerp(b.pos, s)
+
+    _cn.subVectors(_cpa, _cpb)
+    if (_cn.lengthSq() < 1e-10) {
+      _cn.subVectors(a.vel, b.vel)
+      if (_cn.lengthSq() < 1e-10) _cn.set(0, 1, 0)
+    }
+    _cn.normalize()
+
+    // Reflect both about the contact plane -- a ricochet, same semantics as a
+    // wall bounce, and reflect() preserves each speed.
+    a.vel.reflect(_cn)
+    b.vel.reflect(_cn)
+
+    // Pull them back to the contact point and nudge apart so they do not just
+    // re-collide on the next frame.
+    const half = CFG.proj.crossRadius * 0.5 + 0.02
+    a.pos.copy(_cpa).addScaledVector(_cn, half)
+    b.pos.copy(_cpb).addScaledVector(_cn, -half)
+
+    a.bounces++
+    b.bounces++
+    this._applyHeat(a)
+    this._applyHeat(b)
+    this._pushTrail(a)
+    this._pushTrail(b)
+    game.onProjectileBounce(a, _cn, 'proj')
+    game.onProjectileBounce(b, _cn, 'proj')
   }
 
   /**
@@ -395,6 +497,21 @@ export class ProjectileSystem {
         }
       }
 
+      // Mines are analytic spheres like debris -- a shot cannot tunnel one. A hit
+      // sets the mine off (game credits the shooter) and consumes the shot.
+      const mines = game.mines ? game.mines.mines : null
+      if (mines) {
+        for (const m of mines) {
+          if (!m.alive) continue
+          const t = raySphere(p.pos, _dir, bestT, m.pos, m.radius + CFG.proj.radius)
+          if (t >= 0) {
+            bestT = t
+            hitKind = 'mine'
+            hitObj = m
+          }
+        }
+      }
+
       for (const bot of game.bots) {
         if (!bot.alive) continue
         // THE arming rule: a projectile ignores only its own shooter, and only
@@ -435,6 +552,14 @@ export class ProjectileSystem {
       remaining -= bestT
 
       if (!hitKind) break
+
+      if (hitKind === 'mine') {
+        // The mine's own blast covers the area; the shot is spent, no separate
+        // projectile detonation, so the damage is not double-counted.
+        game.onProjectileHitMine(p, hitObj)
+        this._recycle(p)
+        return 'gone'
+      }
 
       if (hitKind === 'bot') {
         // Frostiles freeze on a direct hit only. Applied before the damage pair

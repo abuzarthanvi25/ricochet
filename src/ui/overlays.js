@@ -1,5 +1,6 @@
 import { DIFFICULTIES } from '../core/difficulty.js'
 import { POWERUPS } from '../core/powerups.js'
+import { SENS_MIN, SENS_MAX, PROJ_MIN, PROJ_MAX } from '../core/settings.js'
 
 const $ = (id) => document.getElementById(id)
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`
@@ -16,9 +17,10 @@ const CONTROL_COLUMNS = [
     { keys: ['Shift'], label: 'Descend' },
   ],
   [
-    { keys: ['Q'], alt: 'RMB', label: 'Boost dash' },
+    { keys: ['Q'], label: 'Boost dash' },
     { keys: ['Mouse'], label: 'Aim' },
     { keys: ['LMB'], label: 'Fire' },
+    { keys: ['X'], label: 'Flight assist' },
     { keys: ['Esc'], label: 'Pause' },
   ],
 ]
@@ -31,11 +33,13 @@ export class Overlays {
       over: $('screen-over'),
       win: $('screen-win'),
       paused: $('screen-paused'),
+      options: $('screen-options'),
     }
     this.btnPlay = $('btn-play')
     this.btnRetry = $('btn-retry')
     this.btnAgain = $('btn-again')
     this.btnResume = $('btn-resume')
+    this.btnOptionsBack = $('btn-options-back')
     this.loading = $('loading')
 
     this.btnPlay.disabled = true
@@ -44,12 +48,161 @@ export class Overlays {
     this.controlGroups = [...document.querySelectorAll('[data-controls-group]')]
     this.powerupGroups = [...document.querySelectorAll('[data-powerup-group]')]
     this.soundGroups = [...document.querySelectorAll('[data-sound-group]')]
+    this.optionGroups = [...document.querySelectorAll('[data-options-group]')]
+    this.graphicsGroups = [...document.querySelectorAll('[data-graphics-group]')]
     this._onDifficultyPick = null
     this._onSoundToggle = null
+    this._onFlightAssistToggle = null
+    this._onAimAssistToggle = null
+    this._onSensitivityChange = null
+    this._onProjSpeedChange = null
+    this._onBloomToggle = null
     this._buildDifficultyControls()
     this._buildControls()
     this._buildPowerupGuide()
     this._buildSoundToggle()
+    this._buildOptions()
+    this._buildGraphics()
+
+    // Options is its own screen, opened from the title and pause menus and
+    // returning to whichever opened it. Pure overlay navigation -- opening it
+    // mid-match must not resume the game.
+    this._optionsReturn = 'title'
+    for (const btn of document.querySelectorAll('.btn-open-options')) {
+      btn.addEventListener('click', (e) => {
+        e.currentTarget.blur()
+        this.openOptions(e.currentTarget.dataset.return)
+      })
+    }
+    this.btnOptionsBack.addEventListener('click', (e) => {
+      e.currentTarget.blur()
+      this._show(this._optionsReturn)
+    })
+  }
+
+  openOptions(returnTo) {
+    this._optionsReturn = returnTo || 'title'
+    this._show('options')
+  }
+
+  /** Graphics toggles (currently just bloom). Shares the option-toggle styling. */
+  _buildGraphics() {
+    for (const group of this.graphicsGroups) {
+      group.append(this._toggleButton('bloom', 'BLOOM', () => this._onBloomToggle?.()))
+    }
+  }
+
+  onBloomToggle(fn) {
+    this._onBloomToggle = fn
+  }
+
+  setBloom(on) {
+    this._setToggle('bloom', on)
+  }
+
+  /**
+   * Flight-assist / aim-assist toggles and a sensitivity slider, rendered onto
+   * both the title screen and the pause menu. Same shared-builder reasoning as
+   * the sound toggle: one source of truth so the two screens cannot disagree.
+   */
+  _buildOptions() {
+    for (const group of this.optionGroups) {
+      group.append(
+        this._toggleButton('flight', 'FLIGHT ASSIST', () => this._onFlightAssistToggle?.()),
+        this._toggleButton('aim', 'AIM ASSIST', () => this._onAimAssistToggle?.()),
+        this._slider('sens', 'SENSITIVITY', SENS_MIN, SENS_MAX, 0.05, (v) =>
+          this._onSensitivityChange?.(v)
+        ),
+        this._slider('proj', 'SHOT SPEED', PROJ_MIN, PROJ_MAX, 0.05, (v) =>
+          this._onProjSpeedChange?.(v)
+        )
+      )
+    }
+  }
+
+  _slider(key, label, min, max, step, onInput) {
+    const wrap = document.createElement('label')
+    wrap.className = 'opt-slider'
+    wrap.dataset.slider = key
+    const cap = document.createElement('span')
+    cap.className = 'opt-cap'
+    cap.textContent = label
+    const input = document.createElement('input')
+    input.type = 'range'
+    input.className = 'opt-input'
+    input.min = min
+    input.max = max
+    input.step = step
+    const val = document.createElement('span')
+    val.className = 'opt-val'
+    input.addEventListener('input', (e) => onInput(parseFloat(e.target.value)))
+    wrap.append(cap, input, val)
+    return wrap
+  }
+
+  _toggleButton(opt, label, onClick) {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'opt-btn'
+    btn.dataset.opt = opt
+    btn.dataset.base = label
+    const dot = document.createElement('span')
+    dot.className = 'opt-dot'
+    const text = document.createElement('span')
+    text.className = 'opt-label'
+    text.textContent = label
+    btn.append(dot, text)
+    btn.addEventListener('click', (e) => {
+      e.currentTarget.blur()
+      onClick()
+    })
+    return btn
+  }
+
+  onFlightAssistToggle(fn) {
+    this._onFlightAssistToggle = fn
+  }
+
+  onAimAssistToggle(fn) {
+    this._onAimAssistToggle = fn
+  }
+
+  onSensitivityChange(fn) {
+    this._onSensitivityChange = fn
+  }
+
+  onProjSpeedChange(fn) {
+    this._onProjSpeedChange = fn
+  }
+
+  _setToggle(opt, on) {
+    for (const btn of document.querySelectorAll(`.opt-btn[data-opt="${opt}"]`)) {
+      btn.classList.toggle('on', on)
+      btn.querySelector('.opt-label').textContent = `${btn.dataset.base}: ${on ? 'ON' : 'OFF'}`
+    }
+  }
+
+  setFlightAssist(on) {
+    this._setToggle('flight', on)
+  }
+
+  setAimAssist(on) {
+    this._setToggle('aim', on)
+  }
+
+  _setSlider(key, mul) {
+    for (const wrap of document.querySelectorAll(`.opt-slider[data-slider="${key}"]`)) {
+      wrap.querySelector('.opt-input').value = mul
+      wrap.querySelector('.opt-val').textContent = `${mul.toFixed(2)}×`
+    }
+  }
+
+  setSensitivity(mul) {
+    this._setSlider('sens', mul)
+  }
+
+  setProjSpeed(mul) {
+    this._setSlider('proj', mul)
   }
 
   /** Same toggle on the title screen and the pause menu. */

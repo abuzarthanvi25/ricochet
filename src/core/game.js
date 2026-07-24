@@ -10,10 +10,13 @@ import { LightPool } from '../fx/lights.js'
 import { sfx } from '../fx/audio.js'
 import { clamp } from './util.js'
 import { Nameplates } from '../ui/nameplates.js'
+import { Radar } from '../ui/radar.js'
 import { getDifficulty, loadDifficulty, saveDifficulty } from './difficulty.js'
 import { PowerupSystem, POWERUPS } from './powerups.js'
+import { MineField } from './mines.js'
 
 const _v = new THREE.Vector3()
+const _mineColor = new THREE.Color()
 
 export const STATE = {
   IDLE: 'idle',
@@ -43,6 +46,7 @@ export class Game {
 
     this.powerups = new PowerupSystem(scene)
     this.powerups.onCollect = (bot, type) => this._onPowerupCollected(bot, type)
+    this.mines = new MineField(scene)
 
     this.player = new Player(scene)
     this.player.onHurt = () => {
@@ -61,14 +65,20 @@ export class Game {
     for (let i = 0; i < CFG.enemy.count; i++) this.enemies.push(new Enemy(scene, i))
 
     this.bots = [this.player, ...this.enemies]
-    this.damageContext = { bounces: 0, ownerId: -1 }
+    // `source` distinguishes a mine blast from a projectile so the kill feed can
+    // read MINE; set by detonateMine, reset by setDamageContext.
+    this.damageContext = { bounces: 0, ownerId: -1, source: 'proj' }
     this._warnOn = false
 
     this.nameplates = new Nameplates(document.getElementById('nameplates'))
     for (const e of this.enemies) this.nameplates.register(e)
+    this.radar = new Radar(document.getElementById('radar'))
 
     this.attackers = new Set()
     this._ranked = []
+    // Global aim-assist gate (options toggle); its strength still comes from the
+    // difficulty. main.js overrides this from localStorage on boot.
+    this.aimAssistEnabled = true
     this._addLight = (pos, color, intensity) => this.lights.add(pos, color, intensity)
     this.setDifficulty(loadDifficulty())
   }
@@ -79,6 +89,11 @@ export class Game {
     this.difficultyId = getDifficulty(id).id
     this.diff = getDifficulty(id)
     for (const e of this.enemies) e.applyDifficulty(this.diff)
+    // The player has its own HP pool -- a survivability buffer on the easy tiers,
+    // not shared with the bots. Clamp current hp if the cap dropped mid-match; a
+    // raise takes full effect on the next spawn (and via regen), not as a heal.
+    this.player.maxHp = this.diff.playerHp
+    if (this.player.hp > this.player.maxHp) this.player.hp = this.player.maxHp
     saveDifficulty(this.difficultyId)
     this.onDifficultyChange?.(this.difficultyId)
   }
@@ -128,9 +143,12 @@ export class Game {
       taken.push(p)
     }
 
+    // Mines are placed after the bots so they clear everyone's spawn.
+    this.mines.reset(this)
+
     this.rig.reset(this.player)
     this.hud.setScore(0, 0, CFG.match.killsToWin)
-    this.hud.setHp(this.player.hp, CFG.bot.maxHp)
+    this.hud.setHp(this.player.hp, this.player.maxHp)
     this.hud.setWarn(false)
     this.hud.setPowerup(null, 0)
     this.hud.setFrozen(0)
@@ -173,9 +191,10 @@ export class Game {
 
     this._updateAttackerSlots()
     for (const b of this.bots) b.update(dt, this)
-    // After the bots have moved, so a pickup is collected the frame you reach
-    // it rather than the frame after.
+    // After the bots have moved, so a pickup is collected -- or a mine is set
+    // off -- the frame you reach it rather than the frame after.
     this.powerups.update(dt, this)
+    this.mines.update(dt, this)
     this._handleRespawns(dt)
 
     this.projectiles.update(dt, this)
@@ -186,6 +205,7 @@ export class Game {
     this._updateLights()
     this._updateHud()
     this.nameplates.update(this.camera, this.bots, this.arena, this.viewport)
+    this.radar.update(this.rig, this.player.pos, this.enemies)
   }
 
   _handleRespawns(dt) {
@@ -255,7 +275,7 @@ export class Game {
 
   _updateHud() {
     const p = this.player
-    this.hud.setHp(p.alive ? p.hp : 0, CFG.bot.maxHp)
+    this.hud.setHp(p.alive ? p.hp : 0, p.maxHp)
     this.hud.setCooldown(p.alive ? 1 - clamp(p.fireCd / CFG.player.fireCooldown, 0, 1) : 0)
     this.hud.setBoost(p.alive ? 1 - clamp(p.boostCd / CFG.player.boostCooldown, 0, 1) : 0)
     this.hud.setPowerup(p.alive ? p.powerup : null, p.powerup01())
@@ -299,6 +319,49 @@ export class Game {
   setDamageContext(p) {
     this.damageContext.bounces = p.bounces
     this.damageContext.ownerId = p.ownerId
+    this.damageContext.source = 'proj'
+  }
+
+  /**
+   * A mine going off. Damages every bot in the blast radius -- neutral, so the
+   * arming rule does not apply and it is NOT difficulty-scaled. `attackerId` is
+   * whoever fired the shot that set it off (credited for any kills), or -1 for a
+   * bot that flew into it (an environmental kill, scored for no one). The kill
+   * feed reads `source === 'mine'` to label it.
+   */
+  detonateMine(pos, attackerId) {
+    const M = CFG.mines
+    this.explosions.spawn(pos, _mineColor.set(M.color))
+    const camDist = pos.distanceTo(this.camera.position)
+    sfx.explode(camDist)
+    this.rig.addShake(clamp(1 - camDist / 40, 0, 1) * 0.8)
+
+    this.damageContext.bounces = 0
+    this.damageContext.ownerId = attackerId
+    this.damageContext.source = 'mine'
+
+    for (const bot of this.bots) {
+      if (!bot.alive) continue
+      const d = bot.pos.distanceTo(pos)
+      if (d > M.blastRadius + bot.radius) continue
+
+      const falloff = 1 - clamp((d - bot.radius) / M.blastRadius, 0, 1)
+      _v.subVectors(bot.pos, pos)
+      if (_v.lengthSq() < 1e-6) _v.set(0, 1, 0)
+      _v.normalize()
+      bot.vel.addScaledVector(_v, M.blastKnock * falloff)
+      bot.overspeed = 0.6
+
+      bot.takeDamage(M.blastDamage * falloff, attackerId, this)
+      if (bot === this.player) this.hud.flashDamage()
+      else if (bot.alive) this.hud.hitmarker(false)
+    }
+    this.damageContext.source = 'proj'
+  }
+
+  /** A projectile struck a mine: the mine goes off, credited to the shooter. */
+  onProjectileHitMine(p, mine) {
+    this.mines.explode(mine, p.ownerId, this)
   }
 
   /**
@@ -341,6 +404,13 @@ export class Game {
     const killer = this.bots.find((b) => b.id === attackerId) || null
     const bounced = this.damageContext.bounces > 0
     const selfKill = killer === victim
+    // A mine blast reads as MINE. An *environmental* mine kill -- a bot that flew
+    // into one, so nobody fired the trigger -- scores for no one; a shot-triggered
+    // mine is credited to whoever fired that shot, like any other kill.
+    const isMine = this.damageContext.source === 'mine'
+    const environmental = isMine && !killer
+    const verb = isMine ? 'MINE' : bounced ? 'RICOCHET' : 'DIRECT'
+    const selfVerb = isMine ? 'OWN MINE' : 'OWN RICOCHET'
 
     sfx.death(victim.pos.distanceTo(this.camera.position))
 
@@ -349,7 +419,9 @@ export class Game {
       // delay *after* the corpse clears -- not the total time dead.
       victim.respawnTimer = CFG.enemy.respawnDelay
 
-      if (killer === this.player) {
+      if (environmental) {
+        this.hud.addKill({ killer: null, victim: victim.label, victimTeam: 'enemy', verb })
+      } else if (killer === this.player) {
         this.score.you++
         this.hud.hitmarker(true)
         sfx.kill()
@@ -358,7 +430,7 @@ export class Game {
           killerTeam: 'player',
           victim: victim.label,
           victimTeam: 'enemy',
-          verb: bounced ? 'RICOCHET' : 'DIRECT',
+          verb,
         })
       } else if (selfKill) {
         // A bot killed by its own bounced shot. No score, but it is worth seeing.
@@ -366,7 +438,7 @@ export class Game {
           killer: null,
           victim: victim.label,
           victimTeam: 'enemy',
-          verb: 'OWN RICOCHET',
+          verb: selfVerb,
         })
       } else {
         this.hud.addKill({
@@ -374,21 +446,23 @@ export class Game {
           killerTeam: 'enemy',
           victim: victim.label,
           victimTeam: 'enemy',
-          verb: bounced ? 'RICOCHET' : 'DIRECT',
+          verb,
         })
       }
     } else {
       victim.respawnTimer = CFG.match.playerRespawnDelay
       this.rig.addShake(0.9)
 
-      if (selfKill) {
+      if (environmental) {
+        this.hud.addKill({ killer: null, victim: 'YOU', victimTeam: 'player', verb })
+      } else if (selfKill) {
         // Killed by your own ricochet: the mechanic biting back. Costs a point.
         this.score.you = Math.max(0, this.score.you - 1)
         this.hud.addKill({
           killer: null,
           victim: 'YOU',
           victimTeam: 'player',
-          verb: 'OWN RICOCHET',
+          verb: selfVerb,
         })
       } else {
         this.score.them++
@@ -397,7 +471,7 @@ export class Game {
           killerTeam: 'enemy',
           victim: 'YOU',
           victimTeam: 'player',
-          verb: bounced ? 'RICOCHET' : 'DIRECT',
+          verb,
         })
       }
     }

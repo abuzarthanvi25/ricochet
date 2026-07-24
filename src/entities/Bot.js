@@ -3,6 +3,7 @@ import { CFG } from '../config.js'
 import { createBotModel, CLIP } from '../core/assets.js'
 import { clampToArena, resolveSphere } from '../core/collision.js'
 import { clamp, orientToDirection } from '../core/util.js'
+import { getProjSpeedMul } from '../core/settings.js'
 
 let nextId = 1
 
@@ -39,12 +40,19 @@ export class Bot {
     this.maxSpeed = maxSpeed
     this.drag = drag
 
-    this.hp = CFG.bot.maxHp
+    // Max HP is an instance field, not the CFG constant: difficulty scales it
+    // per bot (Enemy.applyDifficulty) and the player has its own pool. spawnAt
+    // must reset from THIS, or a scaled bot silently reverts to 100 on respawn.
+    this.maxHp = CFG.bot.maxHp
+    this.hp = this.maxHp
     this.alive = true
     this.dying = false
     this.deathTimer = 0
     this.fireCd = 0
     this.flashTimer = 0
+    // Seconds since this bot last took damage. Drives the player's regen on the
+    // easy tiers; harmless on everyone else.
+    this._sinceHit = 0
 
     // Powerups. One slot, no swapping -- see equip().
     this.powerup = null
@@ -57,6 +65,8 @@ export class Bot {
     this.powerMul = 1 // permaboost
     this.slowTimer = 0
     this._tint = null
+    // Flight assist braking flag, set by Player each frame; bots leave it false.
+    this._assistBraking = false
 
     this.group = new THREE.Group()
     this.built = createBotModel(color, bodyTint)
@@ -209,9 +219,11 @@ export class Bot {
    * lead too far.
    */
   projSpeed() {
-    return this.powerup === 'permaboost'
-      ? CFG.proj.speed * CFG.powerups.permaboost.projSpeedMul
-      : CFG.proj.speed
+    // Global player-set multiplier times the permaboost multiplier. Reading it
+    // here is what keeps the enemy lead-aim solver honest -- Enemy._tryFire
+    // solves the intercept with projSpeed(), so both scale together.
+    const base = CFG.proj.speed * getProjSpeedMul()
+    return this.powerup === 'permaboost' ? base * CFG.powerups.permaboost.projSpeedMul : base
   }
 
   // ------------------------------------------------------------------ spawn
@@ -220,7 +232,8 @@ export class Bot {
     this.pos.copy(pos)
     this.vel.set(0, 0, 0)
     this.wish.set(0, 0, 0)
-    this.hp = CFG.bot.maxHp
+    this.hp = this.maxHp
+    this._sinceHit = 0
     this.alive = true
     this.dying = false
     this.deathTimer = 0
@@ -304,8 +317,13 @@ export class Bot {
       this.vel.addScaledVector(this.wish, this.accel * this.speedMul * this.powerMul * dt)
     }
 
-    // Frame-rate independent drag. Never `vel *= 0.92` per frame.
-    this.vel.multiplyScalar(Math.pow(this.drag, dt))
+    // Frame-rate independent drag. Never `vel *= 0.92` per frame. Flight assist
+    // (player only) swaps in a much stronger drag while no thrust is held and no
+    // dash is in flight, so the ship settles to a near-stop in about half a
+    // second instead of drifting on. Bots never set _assistBraking -- their
+    // coasting drift is part of how they read.
+    const dragK = this._assistBraking ? CFG.player.assistDrag : this.drag
+    this.vel.multiplyScalar(Math.pow(dragK, dt))
 
     const cap = this.maxSpeed * this.speedMul * this.powerMul * (this.overspeed > 0 ? 2.2 : 1)
     const sp = this.vel.length()
@@ -350,6 +368,7 @@ export class Bot {
   takeDamage(amount, attackerId, game) {
     if (!this.alive) return
     this.hp -= amount
+    this._sinceHit = 0
     this.flashTimer = CFG.bot.hurtFlashTime
 
     if (this.hp <= 0) {
@@ -382,6 +401,7 @@ export class Bot {
   update(dt, game) {
     if (this.fireCd > 0) this.fireCd -= dt
     if (this.overspeed > 0) this.overspeed -= dt
+    this._sinceHit += dt
     this._updateSlow(dt)
 
     if (this.dying) {

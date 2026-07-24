@@ -11,6 +11,94 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 _Nothing yet._
 
+## [0.3.0] — 2026-07-24
+
+A newcomer-experience pass — softening the landing for a first-time player who
+found the game too punishing even on the old easiest tier — plus a set of new
+combat mechanics: floating mines, shots that ricochet off each other, and a
+projectile-speed option.
+
+### Added
+
+- **Floating mines** — a fixed number of spiked sea-mines are placed at match
+  start and stay put; they do not respawn. Touch one, or hit one with any shot,
+  and it detonates for heavy damage across a wide radius — enough to bait a bot
+  into. A mine you set off with your own shot is **credited to you**; a bot that
+  flies into one dies environmental, scored for no one. Neutral and **not**
+  difficulty-scaled — a hazard is a hazard. Shots test them as analytic spheres,
+  so a fast shot cannot tunnel through one.
+- **Shots ricochet off each other.** Two projectiles that cross in mid-air
+  deflect, and each crossing counts as a bounce — so **both arm** against their
+  own shooters. Deliberately knocking a shot off course (or banking one back into
+  yourself) becomes a real tactic. Detection is a swept closest-approach over each
+  frame, so a crossing is caught even at full speed and never tunnels; it runs
+  after the wall/debris/bot sweeps, so it cannot disturb their exact guarantee.
+- **Projectile-speed slider** in the options — scales every shot from 0.6× to
+  1.6×, persisted. It flows through the same value the enemy lead-aim solver
+  reads, so faster shots are still led correctly.
+
+- **CADET difficulty** — a new easiest tier below RECRUIT, and the default. One
+  bot fires at a time, with a wide aim cone, slow cadence and low damage.
+- **The easy tiers now ease more than enemy output.** CADET and RECRUIT make bots
+  **less tanky** (two clean hits instead of three), give **you a larger HP pool
+  that regenerates** after a few seconds without being hit, and turn on **aim
+  assist**. SOLDIER and VETERAN are deliberately untouched — bot HP 100, your HP
+  100, no regen, no aim help — so they play exactly as before.
+- **Aim assist (bullet magnetism)** — a fresh player shot bends toward the enemy
+  nearest your crosshair, within a narrow cone, by a strength that comes from the
+  difficulty. It nudges only the initial direction before the shot spawns, so the
+  ricochet arming rule and the analytic no-tunnelling guarantee are untouched — a
+  magnetised shot still bounces and can still come back to kill you. There is a
+  global on/off toggle independent of difficulty.
+- **Flight assist (`X`, on by default)** — auto-brakes the instant you release
+  thrust, so the ship settles to a near-stop in about half a second instead of
+  drifting on. Toggleable so veterans keep the full Newtonian coast; the HUD
+  flashes the new state when you press `X`.
+- **Radar disc** (bottom-right) — you at the centre, red blips for the bots,
+  screen-up is your heading, so an enemy behind you reads as a blip below centre,
+  with a short stalk for above/below. Drawn to a 2D canvas, not three.js, so it
+  adds no shader-program surface. Answers the "where did that shot come from"
+  problem that 6-DOF makes acute.
+- **A dedicated Options menu**, reached from both the title screen and the pause
+  menu, gathering every setting in one place: difficulty, flight-assist and
+  aim-assist toggles, mouse-sensitivity and shot-speed sliders, the sound toggle,
+  and a **graphics** section. All persist to `localStorage`. This declutters the
+  pause menu, which now shows only the controls legend plus RESUME / OPTIONS.
+- **Bloom can be turned off** (graphics options). Bloom is the single most
+  expensive thing in the frame, so switching it off is the biggest win on a
+  low-end machine. It toggles the composer pass's `enabled` flag, so it changes
+  no shader program and is free and instant.
+
+### Changed
+
+- **The arena is ~1.4× larger** — 84 × 52 × 84, up from 60 × 40 × 60 — for more
+  room to fly. Fog range, ambient/key light intensity, wall emissive and the
+  point-light pool's reach all scale with it, because **fog, not lighting, is
+  what darkened a bigger box**: fog is applied after lighting, so a wall past
+  `fogFar` renders near-black however it is lit. None of this changes the visible
+  light **count**, so no shaders recompile. Debris count and nameplate range grew
+  to match; base movement speed is up slightly so travel isn't tedious.
+- **Boost is `Q` only.** It used to double up on the right mouse button, which
+  dashed newcomers into a wall on the natural "aim" reflex; RMB is now unbound.
+
+### Performance
+
+- **Mines are one instanced draw call**, not 65 meshes. Each mine was a body plus
+  twelve spike meshes; a body and its spikes are now merged into one geometry and
+  all five mines share a single `InstancedMesh` — so up to 65 draw calls collapse
+  to 1, and the mines share the arena-debris shader program instead of adding
+  their own. CPU update time (0.76ms) and the O(n²) shot-collision pass (0.075ms
+  at a full 96-projectile pool) both profiled clean, so no other change was
+  needed.
+
+### Fixed
+
+- **Flash of unstyled content on load.** `style.css` is imported by `main.js`, so
+  in dev it was injected only once the bundle ran — flashing the raw, unstyled
+  overlay for a frame first. The page now paints dark and hides the body until
+  `main.js` clears a `preload` class (styles are applied by then): no flash, just
+  a brief dark screen.
+
 ## [0.2.0] — 2026-07-24
 
 ### Added
@@ -275,6 +363,7 @@ Three asset quirks handled at load, documented in `core/assets.js`:
 
 Model: **Shooter Bot** by Aurantiko, CC-BY-4.0, via Sketchfab.
 
-[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/v0.2.0...develop
+[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/v0.3.0...develop
+[0.3.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.3.0
 [0.2.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.2.0
 [0.1.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.1.0

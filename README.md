@@ -33,19 +33,20 @@ npm run dev      # http://localhost:5173
 
 ## Controls
 
-| Input              | Action                                                            |
-| ------------------ | ----------------------------------------------------------------- |
-| `W` `A` `S` `D`    | Thrust, relative to where you're looking                          |
-| `Space`            | Ascend (**world** up, always)                                     |
-| `Shift`            | Descend (**world** down, always)                                  |
-| `Q` or right mouse | Boost dash — 1.2s cooldown                                        |
-| Mouse              | Aim                                                               |
-| Left mouse         | Fire                                                              |
-| `Esc`              | Release the pointer (pauses)                                      |
-| `M`                | Mute / unmute (also a button on the title and pause screens)      |
-| `F2`               | Powerup debug — with it on, `1`–`4` grant any powerup, `0` clears |
-| `F3`               | Debug overlay — with it on, `1`–`5` play each animation clip solo |
-| `F4`               | Performance overlay (also via `?perf` in the URL)                 |
+| Input           | Action                                                            |
+| --------------- | ----------------------------------------------------------------- |
+| `W` `A` `S` `D` | Thrust, relative to where you're looking                          |
+| `Space`         | Ascend (**world** up, always)                                     |
+| `Shift`         | Descend (**world** down, always)                                  |
+| `Q`             | Boost dash — 1.2s cooldown                                        |
+| Mouse           | Aim                                                               |
+| Left mouse      | Fire                                                              |
+| `X`             | Toggle flight assist (auto-brake when you stop thrusting)         |
+| `Esc`           | Release the pointer (pauses)                                      |
+| `M`             | Mute / unmute (also a button on the title and pause screens)      |
+| `F2`            | Powerup debug — with it on, `1`–`4` grant any powerup, `0` clears |
+| `F3`            | Debug overlay — with it on, `1`–`5` play each animation clip solo |
+| `F4`            | Performance overlay (also via `?perf` in the URL)                 |
 
 `F2` exists to test a powerup without waiting for one of the four a match gets.
 Grants do not consume the match budget and re-pressing a key refreshes the timer,
@@ -61,8 +62,32 @@ Ascend/descend stay locked to world axes on purpose. That single decision is
 what keeps 6-DOF flight readable instead of nauseating — "up" never rotates out
 from under you, no matter where the camera is pointing.
 
-Boost is `Q`/RMB rather than `Ctrl`, because Chrome's `Ctrl+W` fires straight
+Boost is `Q` rather than `Ctrl`, because Chrome's `Ctrl+W` fires straight
 through pointer lock. Holding boost while thrusting forward would close the tab.
+It used to double up on the right mouse button, but that dashed newcomers into a
+wall on the natural "aim" reflex, so RMB is now unbound.
+
+### Newcomer aids
+
+The controls are 6-DOF and unforgiving by default, so a handful of assists make
+the first hour easier without changing what the game is:
+
+- **Flight assist** (`X`, on by default) auto-brakes the moment you release
+  thrust, so the ship settles to a near-stop instead of coasting for half a
+  second. Veterans can switch it off for the full Newtonian drift.
+- **Aim assist** bends a fresh shot toward the enemy nearest your crosshair,
+  within a narrow cone. Its strength comes from the difficulty (strong on CADET,
+  off on SOLDIER/VETERAN) and there is a global on/off toggle.
+- **Sensitivity** and **shot-speed** sliders scale mouse look and projectile
+  speed (0.6×–1.6×). All of these — plus difficulty, sound, and a **graphics**
+  section that can turn **bloom** off (the biggest GPU win on a weak machine) —
+  live in a dedicated **Options** menu reached from both the title screen and the
+  pause menu, and persist to `localStorage`. The pause menu itself stays lean:
+  the controls legend plus RESUME / OPTIONS.
+- A **radar disc** (bottom-right) puts you at the centre with red blips for the
+  bots — screen-up is your heading, so an enemy behind you shows up below centre,
+  with a short stalk for above/below. It answers the "where did that shot come
+  from" problem that 6-DOF makes acute.
 
 ---
 
@@ -144,17 +169,45 @@ square on.
 Bots break off to grab a pickup within 22 units and their nameplate shows what
 they are carrying. Die and you drop it.
 
+## Hazards & shot ricochet
+
+**Floating mines.** A fixed number of spiked sea-mines are placed at the start of
+each match and stay put — they do not respawn, so a match is a minefield you can
+learn and clear. Touch one, or hit one with any shot, and it detonates for heavy
+damage across a wide radius. A mine you set off with your own shot is **credited
+to you**; a bot that blunders into one dies for no one's score, so herding a bot
+onto a mine is a genuine play. The blast is neutral and not difficulty-scaled —
+it hurts everyone in range, you included. Shots test mines as analytic spheres,
+so a fast shot cannot punch through one without setting it off.
+
+**Shots ricochet off each other.** Two projectiles that cross in mid-air deflect,
+and — because a deflection is a bounce — **both arm against their own shooters**.
+It is rare by accident and powerful on purpose: knock an incoming shot off line,
+or bank one off another to send it somewhere the wall geometry never would. The
+crossing is detected as a swept closest-approach each frame, so it triggers even
+at full speed and never tunnels.
+
 ## Difficulty
 
 Selectable from the title screen **and** the pause menu, applied live without a
-restart, saved to `localStorage`. Default is **SOLDIER**.
+restart, saved to `localStorage`. Default is **CADET**.
 
-|                     | RECRUIT | SOLDIER | VETERAN |
-| ------------------- | ------- | ------- | ------- |
-| Bots firing at once | 2       | 3       | 4       |
-| Fire cooldown       | 2.4s    | 1.9s    | 1.5s    |
-| Aim cone            | 11°     | 8°      | 5.5°    |
-| Damage scale        | 0.55    | 0.8     | 1.0     |
+|                     | CADET  | RECRUIT | SOLDIER | VETERAN |
+| ------------------- | ------ | ------- | ------- | ------- |
+| Bots firing at once | 1      | 2       | 3       | 4       |
+| Fire cooldown       | 3.0s   | 2.4s    | 1.9s    | 1.5s    |
+| Aim cone            | 15°    | 11°     | 8°      | 5.5°    |
+| Damage scale        | 0.4    | 0.55    | 0.8     | 1.0     |
+| Bot HP (hits @ 34)  | 50 (2) | 65 (2)  | 100 (3) | 100 (3) |
+| Your HP             | 150    | 120     | 100     | 100     |
+| Regen               | 8/s    | 4/s     | —       | —       |
+| Aim assist          | 0.6    | 0.35    | —       | —       |
+
+The earlier tiers only ever eased what the bots _did_; CADET and RECRUIT also
+make bots **less tanky** (two clean hits, not three), give **you a bigger HP pool
+that regenerates** after a lull, and turn on **aim assist**. SOLDIER and VETERAN
+are untouched — bot HP 100, your HP 100, no regen, no aim help — so they play
+exactly as before.
 
 The dominant lever is **how many bots may fire at once**, not their accuracy.
 Four bots focus-firing one target is what makes a fight unsurvivable; capping it

@@ -60,6 +60,8 @@ core/
   arena.js     wall box + drifting debris
   difficulty.js presets + localStorage
   powerups.js  registry + the pickups floating in the arena
+  mines.js     finite floating sea-mines (destructible hazards)
+  settings.js  persisted options: flight/aim assist, sensitivity, shot speed
 entities/      Bot (shared base) -> Player, Enemy
 weapons/projectiles.js   stepping, bouncing, arming — the core mechanic
 fx/            explosions, shared light pool, synthesised audio
@@ -141,6 +143,77 @@ sphere makes them vanish.
 **Additive + `toneMapped: false` feeds bloom directly.** Opacities that look
 sane on paper blow out to solid white: the shield started at 0.1/0.45 and hid
 the bot entirely. Shield and pickup materials sit at 0.03–0.28 for that reason.
+
+**`maxHp` is a per-instance field, and `spawnAt` resets from it.** Difficulty
+scales bot HP (`Enemy.applyDifficulty`) and the player has its own pool
+(`Game.setDifficulty`). `Bot.spawnAt` sets `this.hp = this.maxHp`, never
+`CFG.bot.maxHp` — the constant reset is the bug that silently reverts a scaled
+bot to 100 on every respawn. HUD and nameplate fractions divide by `bot.maxHp`
+too, not the constant.
+
+**Aim assist bends only the initial fire direction, before spawn.** `aimAssist()`
+in `core/util.js` runs in `Player.think` on a fresh shot's direction and nothing
+else. It never touches a projectile mid-flight, so the analytic sweep and the
+arming rule are untouched — a magnetised shot bounces and arms like any other.
+Strength is `diff.aimAssist` gated by `game.aimAssistEnabled`; both are 0/off on
+SOLDIER and VETERAN, which must stay bit-for-bit unchanged.
+
+**Fog range is what darkens a bigger arena, not lighting.** Fog is applied after
+lighting/emissive, so a wall past `fogFar` renders near-black however it is lit.
+Relight a resized box by pushing `fogNear/fogFar`, the static ambient/key
+_intensity_, wall `emissiveIntensity` and the point pool's `distance` — all
+uniforms. Never raise `CFG.pools.lights` or add a light to brighten the room:
+that changes the visible light count and recompiles every material (see above).
+
+**Flight assist is a player-only drag swap.** `Bot.integrate` uses
+`CFG.player.assistDrag` in place of `this.drag` when `this._assistBraking` is set,
+and only `Player.think` ever sets that flag (no thrust held, no dash in flight).
+Bots must keep their normal drag — their coasting drift is part of how they read.
+
+**The radar is DOM/canvas, never three.js.** `ui/radar.js` draws to a 2D canvas,
+so it adds zero shader-program surface. Keep it that way; a WebGL radar would be
+new program-key surface on the hottest path. The blip projection is the pure
+`computeBlip()` (unit-tested headless); the class only does the canvas drawing.
+
+**Mines are analytic spheres in the projectile sweep.** `weapons/projectiles.js`
+tests `game.mines.mines` with `raySphere` exactly like debris, so a fast shot
+cannot tunnel one. A hit routes through `game.onProjectileHitMine`, which fires
+the mine's blast (credited to the shot's owner) and consumes the shot — no
+separate projectile detonation, or the damage double-counts. The mine blast is
+**neutral and NOT difficulty-scaled** (`Game.detonateMine`), and it sets
+`damageContext.source = 'mine'` so the kill feed reads MINE; `attackerId === -1`
+means a contact kill scored for no one. **All mines are one `InstancedMesh`** of a
+merged body+spikes geometry (`mines.js` `buildMineGeometry`) — one draw call for
+all five, sharing the flat-shaded Lambert instanced program the arena debris
+already compiled, so mines add no new program key. `frustumCulled` is off (the
+per-instance matrices spin each frame); a dead mine scales to zero. The merged
+geometry must be all-non-indexed — the cones are `toNonIndexed()` before merge,
+because `mergeGeometries` returns **null** on an indexed/non-indexed mismatch and
+a null geometry crashes the renderer.
+
+**Shot-vs-shot ricochet runs once per frame, AFTER the sweeps.**
+`ProjectileSystem._resolveCollisions` compares each pair's swept segment
+(`prevPos → pos`) by closest approach, so a crossing is caught even at full speed
+without tunnelling. It deflects both velocities about the contact normal and
+increments `bounces` on both — a mid-air collision arms both shots. It must stay
+after the per-projectile sweeps: those keep the exact wall/debris/bot guarantee,
+and this pass only reads their finished positions. `prevPos` is snapshotted at
+the top of `update()` before anything moves.
+
+**Projectile speed has a global multiplier in `core/settings.js`.** `Bot.projSpeed`
+multiplies `CFG.proj.speed` by `getProjSpeedMul()`, so the options slider scales
+spawned shots AND the enemy lead-aim solver together — never scale one without
+the other, or bots mislead every shot.
+
+**Toggle bloom with the pass's `enabled` flag, never by removing the pass.**
+`bloom.enabled = false` skips it in `EffectComposer.render` with no material
+recompile — the graphics option relies on this. Adding/removing a pass, or a new
+pass, is program-key surface; the `enabled` flag is not.
+
+**`style.css` is imported by `main.js`, so guard the load with `preload`.**
+`index.html` hides the body (inline critical CSS) while `<html class="preload">`;
+`main.js` clears the class once it runs, by which point styles are applied. Do
+not remove that guard, or dev reintroduces the flash of unstyled overlay.
 
 ## Conventions
 

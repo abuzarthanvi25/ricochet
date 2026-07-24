@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="preload">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -7,6 +7,20 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <title>RICOCHET</title>
+    <!--
+      style.css is imported by main.js, so in dev it is injected only once the
+      bundle has run -- which flashed the raw, unstyled overlay for a frame. This
+      paints the page dark and hides the body until main.js clears `preload`
+      (styles are applied by then). No flash, just a brief dark screen.
+    -->
+    <style>
+      html {
+        background: #04070c;
+      }
+      html.preload body {
+        visibility: hidden;
+      }
+    </style>
   </head>
   <body>
     <canvas id="scene"></canvas>
@@ -73,6 +87,8 @@
 
       <div id="warn-inbound" class="hidden">INCOMING RICOCHET</div>
 
+      <div id="assist-flash" class="hidden"></div>
+
       <div id="powerup" class="hidden">
         <svg class="pu-ring" viewBox="0 0 100 100" width="76" height="76">
           <circle class="pu-ring-bg" cx="50" cy="50" r="42" />
@@ -104,6 +120,8 @@
       </div>
 
       <div id="killfeed"></div>
+
+      <canvas id="radar"></canvas>
 
       <div id="powerup-debug" class="hidden">
         <div class="pd-title">POWERUP DEBUG · F2</div>
@@ -144,15 +162,10 @@
           </div>
         </div>
 
-        <div class="difficulty" data-difficulty-group="title">
-          <div class="diff-label">THREAT LEVEL</div>
-          <div class="diff-options"></div>
-          <div class="diff-blurb"></div>
+        <div class="menu-buttons">
+          <button id="btn-play">CLICK TO ENGAGE</button>
+          <button class="btn-open-options" data-return="title" type="button">OPTIONS</button>
         </div>
-
-        <div class="sound-row" data-sound-group="title"></div>
-
-        <button id="btn-play">CLICK TO ENGAGE</button>
         <p id="loading">loading assets…</p>
         <p class="credit">Model: <em>Shooter Bot</em> by Aurantiko — CC-BY-4.0</p>
       </section>
@@ -186,16 +199,41 @@
 
         <div class="controls" data-controls-group="paused"></div>
 
-        <div class="difficulty" data-difficulty-group="paused">
-          <div class="diff-label">THREAT LEVEL</div>
-          <div class="diff-options"></div>
-          <div class="diff-blurb"></div>
-          <div class="diff-note">Applies immediately — no need to restart.</div>
+        <div class="menu-buttons">
+          <button id="btn-resume">RESUME</button>
+          <button class="btn-open-options" data-return="paused" type="button">OPTIONS</button>
+        </div>
+      </section>
+
+      <!-- Options: every setting, reached from the title and pause screens. -->
+      <section id="screen-options" class="screen hidden">
+        <h1 class="opts">OPTIONS</h1>
+
+        <div class="opt-group">
+          <div class="opt-group-label">THREAT LEVEL</div>
+          <div class="difficulty" data-difficulty-group="options">
+            <div class="diff-options"></div>
+            <div class="diff-blurb"></div>
+            <div class="diff-note">Applies immediately — no need to restart.</div>
+          </div>
         </div>
 
-        <div class="sound-row" data-sound-group="paused"></div>
+        <div class="opt-group">
+          <div class="opt-group-label">GAMEPLAY &amp; CONTROLS</div>
+          <div class="options" data-options-group="options"></div>
+        </div>
 
-        <button id="btn-resume">RESUME</button>
+        <div class="opt-group">
+          <div class="opt-group-label">AUDIO</div>
+          <div class="sound-row" data-sound-group="options"></div>
+        </div>
+
+        <div class="opt-group">
+          <div class="opt-group-label">GRAPHICS</div>
+          <div class="graphics-row" data-graphics-group="options"></div>
+        </div>
+
+        <button id="btn-options-back" type="button">BACK</button>
       </section>
     </div>
 
