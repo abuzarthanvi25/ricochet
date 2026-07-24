@@ -9,10 +9,67 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Currently on the `perf/optimization` branch, not yet merged to `main`.
+Merged to `develop`, not yet released to `main`.
 
 ### Added
 
+- **Powerups** — four of them, and **only four spawn in an entire match**. One of
+  each type, in a shuffled order, first at 12s then every 22s. Everybody
+  contests them: the player and all four bots. One slot each, no swapping — you
+  fly straight through a pickup while you are already holding something.
+  Everything expires on the same 8s clock, shown as a circular glyph with a
+  draining progress ring that pulses over the last two seconds.
+  - **SHIELD** — a bubble at 2.4 units. Shots reflect off it instead of hitting
+    you, and a reflection is a bounce in every sense, so the shot comes off
+    **armed against whoever fired it**. It is a convex mirror, not a retro
+    reflector: an off-centre hit scatters, so the shield reliably saves you but
+    only sometimes kills the shooter. You can still fire out through your own
+    bubble — the arming rule gates the shield exactly as it gates damage.
+  - **PERMABOOST** — a whole-loadout buff, not just a cooldown removal: **1.45×**
+    thrust and top speed, **1.35×** projectile speed, **1.5×** dash impulse, and
+    no dash cooldown. Holds an 82° FOV for its duration so the speed reads on
+    screen. Still edge-triggered, so holding `Q` does not chain-dash. Bots get
+    the equivalent: their evade has no cooldown, so they break away from every
+    incoming shot instead of one every ~0.9s.
+    - Projectile speed became per-shot rather than a global constant. The enemy
+      lead-aim solver reads the firing bot's own muzzle velocity, or a
+      permaboosted bot would consistently over-lead its target.
+  - **FROSTILES** — direct hits drop the target to 0.4× thrust and speed for
+    2.5s and tint it frost-blue. Your own returning ricochet freezes you too.
+    - Taking one puts a blue rime around the screen edge that thaws as you
+      recover, a `SYSTEMS FROZEN` readout above the crosshair, a brittle
+      descending cue and a short camera shake. Blue and edge-weighted on purpose
+      — the red damage vignette owns the same screen area and the two must never
+      be mistaken for one another.
+    - The slow is a separate multiplier from permaboost's, so the two stack:
+      frozen while permaboosted leaves you at 1.45 × 0.4 = 0.58×, slow but not
+      helpless. Neither effect can cancel the other by landing last.
+  - **ROCKETILES** — magenta cones that fly straight for 0.35s, then hunt the
+    nearest entity within 22 units at 3.2 rad/s. Target selection runs the same
+    arming predicate as damage, so a bounced rocketile will come around and hunt
+    the player who fired it.
+  - Bots break off to contest a pickup within 22 units (`AI.COLLECT`), and their
+    nameplate shows what they are holding. A bot's powerup is lost on death.
+- **Controls are now on the pause menu too**, and the title screen carries a
+  powerup legend. Both are built once in `ui/overlays.js` and injected into every
+  screen that asks for them (`[data-controls-group]` / `[data-powerup-group]`),
+  following the existing difficulty-selector pattern — two copies of the key
+  legend in the HTML is how they end up disagreeing after a rebind. The legend
+  reads its rows straight off the `POWERUPS` registry, so it cannot go stale.
+  `Esc` is now listed as well; it was never documented in-game.
+  - The fuller title screen stacked to ~800px, which pushed CLICK TO ENGAGE
+    below the fold on a 768p laptop. A `max-height: 860px` media query compacts
+    it to 642px; `.screen` also gained `max-height: 100vh; overflow-y: auto` as a
+    backstop for anything shorter still.
+- **Sound toggle** on the title screen and the pause menu, plus `M` in-game.
+  Persists to `localStorage`. Muting zeroes the master gain _and_ short-circuits
+  voice construction, so a muted fight stops allocating oscillator, gain and
+  filter nodes entirely rather than building and silencing them.
+- **Powerup debug mode (`F2`)** — grants any powerup on `1`–`4`, clears on `0`,
+  so a powerup can be tested without waiting for one of the four a match gets.
+  Grants bypass the match budget entirely and re-pressing a key refreshes the
+  timer. It claims the digit keys while active, so the `F3` clip inspector is
+  unavailable until it is switched back off — which also drops what you held.
 - **Difficulty presets** — RECRUIT / SOLDIER / VETERAN, selectable from both the
   title screen and the pause menu. Applied live without restarting a match and
   persisted to `localStorage`. Default is SOLDIER.
@@ -76,7 +133,57 @@ Currently on the `perf/optimization` branch, not yet merged to `main`.
   and the explosion light-collection closure.
 - Camera pulled back from 4.6 to 6.2 units for better visibility.
 
-### Performance
+### Performance — second pass
+
+The first pass fixed CPU-side stalls. This one profiled the GPU with
+`EXT_disjoint_timer_query_webgl2` and found the frame was **entirely GPU-bound**:
+game logic totalled 0.82ms/frame against ~7ms of GPU time, so nothing in
+`update()` was worth touching.
+
+Wall-clock GPU numbers drift several ms between runs on this machine, so every
+change below was measured by **interleaving A and B frame-by-frame inside one
+run** — drift then hits both arms equally. Medians and means agree to ~0.01ms.
+
+| Change                                  | GPU delta   |
+| --------------------------------------- | ----------- |
+| Bloom at half internal resolution       | **−6.34ms** |
+| Arena + debris `MeshStandard`→`Lambert` | **−2.21ms** |
+| Projectile instance compaction          | **−0.84ms** |
+| Debris instancing (25 draws → 7)        | −0.36ms     |
+
+- **Instanced pools were drawing at full size every frame.** `InstancedMesh.count`
+  stayed at the pool capacity and dead slots were parked off-screen, so 96 heads
+  and 96 cones — 14,592 triangles — were submitted with zero projectiles in the
+  air. That was **74% of the scene's entire triangle count** while idle. Live
+  projectiles now pack into contiguous instance slots and `count` is set to how
+  many exist. `count` is a draw-call argument, not part of the program key, so
+  changing it per frame cannot trigger a recompile.
+  - Idle triangles **19,766 → 5,054**.
+  - The render slot is deliberately no longer the pool slot, so instance colour
+    moved from `_applyHeat` into the per-frame write.
+- **Bloom ran at full canvas resolution** — five separable blur mips over a
+  full-screen buffer, the single most expensive item in the frame. Its output is
+  blurred by definition, so half-res is visually near-free.
+- **The walls are the most overdrawn surface in the game** — a `BackSide` box the
+  camera sits inside, covering essentially every pixel. At roughness 0.85 /
+  metalness 0.15 the PBR BRDF bought almost nothing over plain diffuse. They
+  still light up from passing projectiles.
+- **Debris are one `InstancedMesh` per shape** instead of 25 separate meshes.
+  They already shared one material, so the split bought nothing but draw calls.
+  Frustum culling is disabled on them deliberately: three.js caches an
+  `InstancedMesh` bounding sphere on first cull and never recomputes it, and
+  these instances drift every frame — a stale sphere would pop debris out of
+  existence.
+
+**Rejected:** converting the bot material to Lambert measured only −0.45ms. The
+bots' cost is vertex/skinning, not shading, and that is not worth changing how
+the hero asset looks.
+
+Recompiles across idle → 60 projectiles → 90 rocketiles → idle: **0**.
+
+---
+
+### Performance — first pass
 
 Held load, update and render timed separately:
 
@@ -92,6 +199,27 @@ Held load, update and render timed separately:
 Gameplay verified unchanged: full-match soaks land at 15–10 stationary and 15–2
 dodging on SOLDIER, with no projectile escapes, no NaN, and exact pool
 accounting.
+
+Powerups added no measurable cost. Same 15s soak with a shot fired every frame,
+budget 4 vs budget 0: frame p50 9.9ms vs 9.4ms, p99 27.0ms vs 27.9ms — inside
+run-to-run noise. **Shader recompiles across a 200s match with every powerup in
+play: 0** (programs held at 29). Two new constant draw calls: one `InstancedMesh`
+for rocketile cones, and up to one per visible pickup.
+
+`powerups.seekRadius` was tuned by measurement, not feel. Over 4-minute matches
+against a player beelining for every pickup with perfect knowledge:
+
+| `seekRadius` | pickups the player won |
+| ------------ | ---------------------- |
+| 30           | 5 / 16                 |
+| 22           | 12 / 16                |
+| 14           | 13 / 16                |
+| 10           | 16 / 16                |
+
+At 30 the bots took nearly everything even against a perfect player, and an
+ordinary player who has to _spot_ a pickup first got none at all. Shipped at 22,
+which also sits exactly on `arena.findSpawn`'s 22-unit bot clearance — a pickup
+always lands just outside the nearest bot's awareness, so somebody has to commit.
 
 ---
 
@@ -145,5 +273,5 @@ Three asset quirks handled at load, documented in `core/assets.js`:
 
 Model: **Shooter Bot** by Aurantiko, CC-BY-4.0, via Sketchfab.
 
-[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/main...perf/optimization
+[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/main...develop
 [0.1.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.1.0

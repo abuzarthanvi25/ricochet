@@ -310,5 +310,479 @@ console.log('\n== projectile stepping / arming ==')
   ok('debris reflects the shot', bounceLog.length >= 1 && p6.vel.z > 0, `vel.z=${p6.vel.z}`)
 }
 
+// ------------------------------------------------------------------ powerups
+console.log('\n== shield ==')
+{
+  const { ProjectileSystem } = await import('../src/weapons/projectiles.js')
+  const sys = new ProjectileSystem({ add() {} })
+  const SR = CFG.powerups.shield.radius
+
+  const damage = []
+  const bounceLog = []
+  const mkBot = (id, x, y, z) => ({
+    id,
+    alive: true,
+    radius: CFG.bot.radius,
+    shieldRadius: 0,
+    pos: new THREE.Vector3(x, y, z),
+    takeDamage(amt, by) {
+      damage.push({ id: this.id, amt, by })
+    },
+  })
+
+  const shooter = mkBot(1, 0, 0, 0)
+  const holder = mkBot(2, 0, 0, -20)
+
+  const game = {
+    arena: { debris: [] },
+    bots: [shooter, holder],
+    damageContext: { bounces: 0, ownerId: -1 },
+    setDamageContext(p) {
+      this.damageContext.bounces = p.bounces
+      this.damageContext.ownerId = p.ownerId
+    },
+    detonate() {},
+    onProjectileBounce(p, _n, kind) {
+      // Capture the contact point itself -- p.pos keeps moving after the
+      // reflect, because the sweep spends the rest of the frame's travel.
+      bounceLog.push({ bounces: p.bounces, kind, z: p.pos.z })
+    },
+  }
+
+  // --- 1. an incoming shot reflects off the bubble and comes back ARMED
+  holder.shieldRadius = SR
+  const p1 = sys.spawn(1, 'player', new THREE.Vector3(0, 0, -2), new THREE.Vector3(0, 0, -1))
+  for (let i = 0; i < 30 && sys.active.length && !bounceLog.length; i++) sys.update(1 / 60, game)
+  ok('shield reflected the shot', bounceLog.length === 1, JSON.stringify(bounceLog))
+  ok('reflection is reported as a shield hit', bounceLog[0]?.kind === 'shield')
+  ok('shield bounce arms it against its shooter', p1.bounces === 1 && p1.vel.z > 0, `${p1.vel.z}`)
+  ok('shielded bot took no damage', damage.length === 0, JSON.stringify(damage))
+  ok(
+    'contact was on the bubble, not the body',
+    // +0.03 is the ease-off-the-surface nudge applied at the reflect.
+    Math.abs(bounceLog[0].z - (holder.pos.z + SR + CFG.proj.radius + 0.03)) < 1e-3,
+    `z=${bounceLog[0]?.z}`
+  )
+
+  // --- 2. the holder can still fire OUT through its own bubble
+  sys.clear()
+  damage.length = 0
+  bounceLog.length = 0
+  shooter.shieldRadius = 0
+  holder.shieldRadius = SR
+  sys.spawn(2, 'enemy', new THREE.Vector3(0, 0, -20), new THREE.Vector3(0, 0, 1))
+  // 20 units to cross at 45 u/s -- give it the ~27 frames that actually takes.
+  for (let i = 0; i < 40 && sys.active.length; i++) sys.update(1 / 60, game)
+  ok(
+    'own fresh shot leaves the bubble',
+    bounceLog.every((b) => b.kind !== 'shield')
+  )
+  ok(
+    'and still hits the other bot',
+    damage.some((d) => d.id === 1),
+    JSON.stringify(damage)
+  )
+
+  // --- 3. a shot already INSIDE the bubble reaches the body, never trapped
+  sys.clear()
+  damage.length = 0
+  bounceLog.length = 0
+  holder.shieldRadius = SR
+  // Spawned between the body and the bubble, heading at the body.
+  sys.spawn(1, 'player', new THREE.Vector3(0, 0, -20 + SR * 0.6), new THREE.Vector3(0, 0, -1))
+  for (let i = 0; i < 20 && sys.active.length; i++) sys.update(1 / 60, game)
+  ok(
+    'shot inside the bubble hits the body',
+    damage.some((d) => d.id === 2),
+    `damage=${JSON.stringify(damage)} bounces=${JSON.stringify(bounceLog)}`
+  )
+  holder.shieldRadius = 0
+}
+
+console.log('\n== rocketiles ==')
+{
+  const { ProjectileSystem } = await import('../src/weapons/projectiles.js')
+  const sys = new ProjectileSystem({ add() {} })
+  const R = CFG.powerups.rocket
+
+  const damage = []
+  const mkBot = (id, x, y, z) => ({
+    id,
+    alive: true,
+    radius: CFG.bot.radius,
+    shieldRadius: 0,
+    pos: new THREE.Vector3(x, y, z),
+    takeDamage(amt, by) {
+      damage.push({ id: this.id, amt, by })
+    },
+  })
+
+  const owner = mkBot(1, 0, 0, 0)
+  const target = mkBot(2, 0, 0, -14)
+  const game = {
+    arena: { debris: [] },
+    bots: [owner, target],
+    damageContext: { bounces: 0, ownerId: -1 },
+    setDamageContext(p) {
+      this.damageContext.bounces = p.bounces
+      this.damageContext.ownerId = p.ownerId
+    },
+    detonate() {},
+    onProjectileBounce() {},
+  }
+
+  // 30 degrees off the target: the rocket must correct, the blast must not.
+  const off = new THREE.Vector3(Math.sin(Math.PI / 6), 0, -Math.cos(Math.PI / 6))
+
+  sys.spawn(1, 'player', new THREE.Vector3(0, 0, -2), off.clone(), 1, 'rocket')
+  for (let i = 0; i < 180 && sys.active.length; i++) sys.update(1 / 60, game)
+  ok(
+    'rocketile corrects onto an off-axis target',
+    damage.some((d) => d.id === 2),
+    JSON.stringify(damage)
+  )
+
+  damage.length = 0
+  sys.clear()
+  sys.spawn(1, 'player', new THREE.Vector3(0, 0, -2), off.clone())
+  for (let i = 0; i < 40 && sys.active.length; i++) sys.update(1 / 60, game)
+  ok('a plain blast on the same line misses', !damage.some((d) => d.id === 2))
+
+  // Arming rule governs the seeker: no lock on the owner before the first bounce.
+  damage.length = 0
+  sys.clear()
+  target.alive = false
+  owner.pos.set(0, 0, -10)
+  const p = sys.spawn(
+    1,
+    'player',
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(1, 0, 0),
+    1,
+    'rocket'
+  )
+  for (let i = 0; i < 30; i++) sys.update(1 / 60, game)
+  ok('does not lock onto its owner pre-bounce', p.vel.x > 0 && damage.length === 0, `${p.vel.x}`)
+  target.alive = true
+
+  // ...and does once bounced. Fire at a wall from close in, then check it turns
+  // back toward the shooter waiting nearby.
+  damage.length = 0
+  sys.clear()
+  target.alive = false
+  owner.pos.set(0, 0, HALF.z - 8)
+  const p2 = sys.spawn(
+    1,
+    'player',
+    new THREE.Vector3(0, 0, HALF.z - 6),
+    new THREE.Vector3(0.35, 0, 1).normalize(),
+    1,
+    'rocket'
+  )
+  let frames = 0
+  while (sys.active.length && frames++ < 300) sys.update(1 / 60, game)
+  ok(
+    'hunts its own shooter once bounced',
+    damage.some((d) => d.id === 1),
+    `bounces=${p2.bounces} damage=${JSON.stringify(damage)}`
+  )
+  target.alive = true
+
+  // The homing turn happens once per frame BEFORE the sweep, so the analytic
+  // no-tunnelling guarantee has to survive it.
+  const realSpeed = CFG.proj.speed
+  CFG.proj.speed = 400
+  owner.pos.set(0, 0, 0)
+  target.pos.set(0, 0, 0)
+  let escaped = 0
+  for (let trial = 0; trial < 200; trial++) {
+    sys.clear()
+    const d = new THREE.Vector3(
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1
+    ).normalize()
+    // Both bots sit at the centre so the seeker is always pulling hard.
+    const pr = sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), d, 1, 'rocket')
+    for (let i = 0; i < 180 && sys.active.length; i++) {
+      sys.update(1 / 60, game)
+      if (
+        Math.abs(pr.pos.x) > HALF.x + 0.5 ||
+        Math.abs(pr.pos.y) > HALF.y + 0.5 ||
+        Math.abs(pr.pos.z) > HALF.z + 0.5
+      ) {
+        escaped++
+        break
+      }
+    }
+  }
+  CFG.proj.speed = realSpeed
+  ok('200 homing rocketiles at 400 u/s, none escaped', escaped === 0, `${escaped} escaped`)
+  ok('turn rate is bounded', R.turnRate > 0 && R.turnRate < 20, `${R.turnRate}`)
+}
+
+console.log('\n== frostiles ==')
+{
+  const { ProjectileSystem } = await import('../src/weapons/projectiles.js')
+  const sys = new ProjectileSystem({ add() {} })
+  const F = CFG.powerups.frost
+
+  const slows = []
+  const owner = {
+    id: 1,
+    alive: true,
+    radius: CFG.bot.radius,
+    shieldRadius: 0,
+    pos: new THREE.Vector3(0, 0, 200),
+    takeDamage() {},
+  }
+  const target = {
+    id: 2,
+    alive: true,
+    radius: CFG.bot.radius,
+    shieldRadius: 0,
+    pos: new THREE.Vector3(0, 0, -14),
+    takeDamage() {},
+    applySlow(dur, mul) {
+      slows.push({ dur, mul })
+    },
+  }
+  const game = {
+    arena: { debris: [] },
+    bots: [owner, target],
+    damageContext: { bounces: 0, ownerId: -1 },
+    setDamageContext() {},
+    detonate() {},
+    onProjectileBounce() {},
+  }
+
+  sys.spawn(
+    1,
+    'player',
+    new THREE.Vector3(0, 0, -2),
+    new THREE.Vector3(0, 0, -1),
+    1,
+    'blast',
+    'frost'
+  )
+  for (let i = 0; i < 60 && sys.active.length; i++) sys.update(1 / 60, game)
+  ok('frostile slows on a direct hit', slows.length === 1, JSON.stringify(slows))
+  ok(
+    'with the configured strength',
+    slows[0]?.mul === F.speedMul && slows[0]?.dur === F.slowDuration
+  )
+
+  slows.length = 0
+  sys.clear()
+  sys.spawn(1, 'player', new THREE.Vector3(0, 0, -2), new THREE.Vector3(0, 0, -1))
+  for (let i = 0; i < 60 && sys.active.length; i++) sys.update(1 / 60, game)
+  ok('a plain blast does not slow', slows.length === 0)
+}
+
+console.log('\n== slow effect ==')
+{
+  // Bot pulled apart from its three.js half: the slow lives entirely in the
+  // numbers, so exercise those without needing a GLB or a WebGL context.
+  const F = CFG.powerups.frost
+  const bot = {
+    speedMul: 1,
+    slowTimer: 0,
+    applySlow(duration, mul) {
+      this.slowTimer = Math.max(this.slowTimer, duration)
+      this.speedMul = Math.min(this.speedMul, mul)
+    },
+    tick(dt) {
+      if (this.slowTimer <= 0) return
+      this.slowTimer -= dt
+      if (this.slowTimer <= 0) {
+        this.slowTimer = 0
+        this.speedMul = 1
+      }
+    },
+  }
+
+  bot.applySlow(F.slowDuration, F.speedMul)
+  ok('slow scales the speed multiplier', bot.speedMul === F.speedMul)
+
+  // A weaker second hit must not undo a stronger one, nor shorten it.
+  bot.tick(1.0)
+  bot.applySlow(0.2, 0.9)
+  ok('a weaker restack keeps the stronger slow', bot.speedMul === F.speedMul)
+  ok('and does not shorten the timer', bot.slowTimer > 1.0, `${bot.slowTimer}`)
+
+  let t = 0
+  while (bot.slowTimer > 0 && t < 10) {
+    bot.tick(1 / 60)
+    t += 1 / 60
+  }
+  ok('expires on time', Math.abs(t - (F.slowDuration - 1.0)) < 0.05, `t=${t.toFixed(3)}`)
+  ok('and restores full speed', bot.speedMul === 1)
+}
+
+console.log('\n== permaboost ==')
+{
+  const { ProjectileSystem } = await import('../src/weapons/projectiles.js')
+  const sys = new ProjectileSystem({ add() {} })
+  const PB = CFG.powerups.permaboost
+
+  ok('speeds up movement', PB.speedMul > 1, `${PB.speedMul}`)
+  ok('speeds up shots', PB.projSpeedMul > 1, `${PB.projSpeedMul}`)
+  ok('strengthens the dash', PB.boostMul > 1, `${PB.boostMul}`)
+
+  // Projectile speed is per-shot, not a global constant.
+  const game = {
+    arena: { debris: [] },
+    bots: [],
+    setDamageContext() {},
+    detonate() {},
+    onProjectileBounce() {},
+  }
+  const fast = CFG.proj.speed * PB.projSpeedMul
+  const a = sys.spawn(1, 'player', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1))
+  const b = sys.spawn(
+    2,
+    'enemy',
+    new THREE.Vector3(0, 5, 0),
+    new THREE.Vector3(0, 0, -1),
+    1,
+    'blast',
+    null,
+    fast
+  )
+  ok(
+    'default speed is the nominal one',
+    near(a.vel.length(), CFG.proj.speed, 1e-3),
+    `${a.vel.length()}`
+  )
+  ok('permaboosted shot leaves faster', near(b.vel.length(), fast, 1e-3), `${b.vel.length()}`)
+
+  const az0 = a.pos.z
+  const bz0 = b.pos.z
+  for (let i = 0; i < 10; i++) sys.update(1 / 60, game)
+  const aTravel = az0 - a.pos.z
+  const bTravel = bz0 - b.pos.z
+  ok(
+    'and covers proportionally more ground',
+    near(bTravel / aTravel, PB.projSpeedMul, 1e-3),
+    `ratio ${(bTravel / aTravel).toFixed(4)} want ${PB.projSpeedMul}`
+  )
+  sys.clear()
+
+  // Two shots at different speeds must not tunnel either.
+  const realSpeed = CFG.proj.speed
+  CFG.proj.speed = 300
+  let escaped = 0
+  for (let trial = 0; trial < 100; trial++) {
+    sys.clear()
+    const d = new THREE.Vector3(
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1,
+      Math.random() * 2 - 1
+    ).normalize()
+    const p = sys.spawn(
+      1,
+      'player',
+      new THREE.Vector3(0, 0, 0),
+      d,
+      1,
+      'blast',
+      null,
+      300 * PB.projSpeedMul
+    )
+    for (let i = 0; i < 180 && sys.active.length; i++) {
+      sys.update(1 / 60, game)
+      if (
+        Math.abs(p.pos.x) > HALF.x + 0.5 ||
+        Math.abs(p.pos.y) > HALF.y + 0.5 ||
+        Math.abs(p.pos.z) > HALF.z + 0.5
+      ) {
+        escaped++
+        break
+      }
+    }
+  }
+  CFG.proj.speed = realSpeed
+  ok('100 permaboosted shots at 405 u/s, none escaped', escaped === 0, `${escaped} escaped`)
+}
+
+console.log('\n== permaboost x frostile stacking ==')
+{
+  // The two multipliers are separate fields on purpose: being frozen while
+  // permaboosted must leave you slow-but-less-slow, not hand whichever landed
+  // last the final say.
+  const PB = CFG.powerups.permaboost
+  const F = CFG.powerups.frost
+  const bot = { speedMul: 1, powerMul: 1 }
+  const effective = () => bot.speedMul * bot.powerMul
+
+  bot.powerMul = PB.speedMul
+  ok('permaboost alone speeds you up', near(effective(), PB.speedMul))
+  bot.speedMul = F.speedMul
+  ok(
+    'frozen while permaboosted multiplies both',
+    near(effective(), PB.speedMul * F.speedMul),
+    `${effective()}`
+  )
+  ok('and that is still slower than baseline', effective() < 1, `${effective()}`)
+  bot.powerMul = 1
+  ok('losing permaboost leaves the slow intact', near(effective(), F.speedMul))
+}
+
+console.log('\n== powerup budget ==')
+{
+  const { POWERUP_IDS } = await import('../src/core/powerups.js')
+
+  ok(
+    'one of every type fits the match budget',
+    POWERUP_IDS.length === CFG.powerups.budgetPerMatch,
+    `${POWERUP_IDS.length} types vs budget ${CFG.powerups.budgetPerMatch}`
+  )
+  ok('all four expire on the same clock', CFG.powerups.duration > 0)
+
+  // PowerupSystem needs a WebGL-free scene stub only; the spawn queue is the
+  // part with the rule in it.
+  const { PowerupSystem } = await import('../src/core/powerups.js')
+  const sys = new PowerupSystem({ add() {} })
+
+  const holder = { alive: true, radius: 1, powerup: 'shield', pos: new THREE.Vector3(), equip() {} }
+  const taker = {
+    alive: true,
+    radius: 1,
+    powerup: null,
+    pos: new THREE.Vector3(),
+    equip(id) {
+      this.powerup = id
+    },
+  }
+  const game = {
+    bots: [holder, taker],
+    arena: { findSpawn: () => new THREE.Vector3(0, 0, 0) },
+  }
+
+  // Run well past every spawn interval; the budget must be the thing that stops it.
+  let collected = 0
+  const seen = new Set()
+  for (let i = 0; i < 60 * 60 * 5; i++) {
+    sys.update(1 / 60, game)
+    if (taker.powerup) {
+      collected++
+      seen.add(taker.powerup)
+      taker.powerup = null
+    }
+  }
+  ok(
+    `only ${CFG.powerups.budgetPerMatch} spawn in a whole match`,
+    sys.spawned === CFG.powerups.budgetPerMatch,
+    `spawned ${sys.spawned}`
+  )
+  ok('every type appeared exactly once', seen.size === POWERUP_IDS.length, [...seen].join(','))
+  ok('the bot already holding one never collected', holder.powerup === 'shield')
+  ok('nothing left floating', sys.active === 0)
+  ok('collections match spawns', collected === CFG.powerups.budgetPerMatch, `${collected}`)
+
+  sys.reset()
+  ok('reset refills the budget', sys.remaining === CFG.powerups.budgetPerMatch && sys.active === 0)
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail ? 1 : 0)

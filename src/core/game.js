@@ -11,6 +11,7 @@ import { sfx } from '../fx/audio.js'
 import { clamp } from './util.js'
 import { Nameplates } from '../ui/nameplates.js'
 import { getDifficulty, loadDifficulty, saveDifficulty } from './difficulty.js'
+import { PowerupSystem, POWERUPS } from './powerups.js'
 
 const _v = new THREE.Vector3()
 
@@ -40,11 +41,19 @@ export class Game {
     this.explosions = new ExplosionSystem(scene)
     this.lights = new LightPool(scene)
 
+    this.powerups = new PowerupSystem(scene)
+    this.powerups.onCollect = (bot, type) => this._onPowerupCollected(bot, type)
+
     this.player = new Player(scene)
     this.player.onHurt = () => {
       this.hud.flashDamage()
       this.rig.addShake(0.35)
       sfx.hurt()
+    }
+    this.player.onPowerupEnd = () => sfx.powerDown()
+    this.player.onSlowed = () => {
+      sfx.freeze()
+      this.rig.addShake(0.25)
     }
     this.player.respawnTimer = 0
 
@@ -106,6 +115,7 @@ export class Game {
     this.time = 0
     this.projectiles.clear()
     this.explosions.clear()
+    this.powerups.reset()
     this.hud.clearKills()
 
     this.player.spawnAt(this.arena.findSpawn(this.player.radius))
@@ -122,6 +132,8 @@ export class Game {
     this.hud.setScore(0, 0, CFG.match.killsToWin)
     this.hud.setHp(this.player.hp, CFG.bot.maxHp)
     this.hud.setWarn(false)
+    this.hud.setPowerup(null, 0)
+    this.hud.setFrozen(0)
     this.attackers.clear()
     this.nameplates.hideAll()
   }
@@ -161,6 +173,9 @@ export class Game {
 
     this._updateAttackerSlots()
     for (const b of this.bots) b.update(dt, this)
+    // After the bots have moved, so a pickup is collected the frame you reach
+    // it rather than the frame after.
+    this.powerups.update(dt, this)
     this._handleRespawns(dt)
 
     this.projectiles.update(dt, this)
@@ -207,11 +222,44 @@ export class Game {
     this.lights.commit(this.camera.position)
   }
 
+  /**
+   * Debug-only: hand the player a powerup directly. Deliberately does NOT touch
+   * the match budget or the pickup pool -- the point is to test a powerup in
+   * isolation without burning one of the four a real match gets. Re-granting the
+   * same one refreshes its timer. Gated behind F2 in main.js.
+   */
+  grantPowerup(id) {
+    if (!POWERUPS[id] || !this.player.alive) return false
+    this.player.equip(id)
+    this.hud.announcePowerup(POWERUPS[id])
+    sfx.powerUp()
+    return true
+  }
+
+  _onPowerupCollected(bot, type) {
+    const preset = POWERUPS[type]
+    if (bot === this.player) {
+      sfx.powerUp()
+      this.hud.announcePowerup(preset)
+    } else {
+      sfx.powerUpRemote(bot.pos.distanceTo(this.camera.position))
+    }
+    this.hud.addKill({
+      killer: bot === this.player ? 'YOU' : bot.label,
+      killerTeam: bot.team,
+      victim: preset.label,
+      victimTeam: 'powerup',
+      verb: 'PICKED UP',
+    })
+  }
+
   _updateHud() {
     const p = this.player
     this.hud.setHp(p.alive ? p.hp : 0, CFG.bot.maxHp)
     this.hud.setCooldown(p.alive ? 1 - clamp(p.fireCd / CFG.player.fireCooldown, 0, 1) : 0)
     this.hud.setBoost(p.alive ? 1 - clamp(p.boostCd / CFG.player.boostCooldown, 0, 1) : 0)
+    this.hud.setPowerup(p.alive ? p.powerup : null, p.powerup01())
+    this.hud.setFrozen(p.alive ? p.slowTimer / CFG.powerups.frost.slowDuration : 0)
 
     const threat = p.alive ? this.projectiles.ricochetThreatTo(p.pos, 26, p.id) : null
     const on = !!threat
@@ -228,13 +276,24 @@ export class Game {
     // Difficulty scales enemy damage only. A player's own ricochet always comes
     // back at full strength -- that rule should never get easier.
     const scale = owner.team === 'enemy' ? this.diff.damageScale : 1
-    const p = this.projectiles.spawn(owner.id, owner.team, origin, dir, scale)
+    const p = this.projectiles.spawn(
+      owner.id,
+      owner.team,
+      origin,
+      dir,
+      scale,
+      owner.projKind(),
+      owner.projMod(),
+      owner.projSpeed()
+    )
     if (p) sfx.fire(origin.distanceTo(this.camera.position))
     return p
   }
 
-  onProjectileBounce(p) {
-    sfx.bounce(p.bounces, p.pos.distanceTo(this.camera.position))
+  onProjectileBounce(p, _normal, hitKind) {
+    const dist = p.pos.distanceTo(this.camera.position)
+    if (hitKind === 'shield') sfx.shieldHit(dist)
+    else sfx.bounce(p.bounces, dist)
   }
 
   setDamageContext(p) {
@@ -377,6 +436,8 @@ export class Game {
       `maxbounce ${maxBounce}`,
       `enemies   ${this.enemies.filter((e) => e.alive).length} alive`,
       `states    ${this.enemies.map((e) => (e.alive ? e.state[0] : '-')).join(' ')}`,
+      `powerups  ${this.powerups.active} out, ${this.powerups.remaining} left this match`,
+      `equipped  ${this.bots.map((b) => (b.powerup ? b.powerup[0].toUpperCase() : '-')).join(' ')}`,
       `drawcalls ${this._drawCalls ?? 0}`,
     ].join('\n')
   }

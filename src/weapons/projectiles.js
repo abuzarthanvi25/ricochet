@@ -7,13 +7,17 @@ const _dir = new THREE.Vector3()
 const _normal = new THREE.Vector3()
 const _wallNormal = new THREE.Vector3()
 const _tmp = new THREE.Vector3()
+const _seek = new THREE.Vector3()
+const _axis = new THREE.Vector3()
 const _mat4 = new THREE.Matrix4()
 const _scaleV = new THREE.Vector3(1, 1, 1)
 const _quat = new THREE.Quaternion()
-const _hidden = new THREE.Vector3(0, -10000, 0)
+const _quatR = new THREE.Quaternion()
+const _upY = new THREE.Vector3(0, 1, 0)
 const _colFresh = new THREE.Color(CFG.proj.colorFresh)
 const _colArmed = new THREE.Color(CFG.proj.colorArmed)
 const _colHot = new THREE.Color(CFG.proj.colorFullyArmed)
+const _colRocket = new THREE.Color(CFG.powerups.rocket.color)
 
 const EPS = 1e-5
 const TRAIL = CFG.fx.trailLength
@@ -35,29 +39,16 @@ export class ProjectileSystem {
 
     const N = CFG.pools.projectiles
 
-    // --- heads: one instanced sphere ---
-    const headGeo = new THREE.SphereGeometry(CFG.proj.radius, 10, 8)
-    // three's color_fragment chunk only applies vColor under USE_COLOR, so
-    // instanceColor alone never reaches the fragment shader. vertexColors plus
-    // an all-white geometry colour attribute opens that path; vColor then ends
-    // up as 1 * white * instanceColor, i.e. exactly the per-instance tint.
-    const vertCount = headGeo.attributes.position.count
-    const white = new Float32Array(vertCount * 3).fill(1)
-    headGeo.setAttribute('color', new THREE.BufferAttribute(white, 3))
-
-    const headMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      vertexColors: true,
-      toneMapped: false,
-    })
-    this.heads = new THREE.InstancedMesh(headGeo, headMat, N)
-    this.heads.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-    this.heads.frustumCulled = false
-    this.heads.count = N
-    // setColorAt allocates instanceColor on first use.
-    this.heads.setColorAt(0, _colFresh)
-    this.heads.instanceColor.setUsage(THREE.DynamicDrawUsage)
+    // --- heads: one instanced sphere for blasts, one instanced cone for
+    //     rocketiles. Two draw calls total regardless of how many are in the
+    //     air, and both are skipped entirely when nothing of that kind is live.
+    this.heads = this._makeInstanced(new THREE.SphereGeometry(CFG.proj.radius, 10, 8), N)
+    this.rockets = this._makeInstanced(
+      new THREE.ConeGeometry(CFG.proj.radius * 1.15, CFG.powerups.rocket.length, 6),
+      N
+    )
     scene.add(this.heads)
+    scene.add(this.rockets)
 
     // --- trails: one LineSegments for the whole pool ---
     const trailGeo = new THREE.BufferGeometry()
@@ -90,6 +81,11 @@ export class ProjectileSystem {
         ownerId: -1,
         ownerTeam: -1,
         damageScale: 1,
+        kind: 'blast', // 'blast' | 'rocket'
+        mod: null, // 'frost' | null
+        // Per-projectile rather than a global constant: permaboost makes shots
+        // fly faster, so speed has to travel with the shot.
+        speed: CFG.proj.speed,
         pos: new THREE.Vector3(),
         vel: new THREE.Vector3(),
         age: 0,
@@ -101,21 +97,44 @@ export class ProjectileSystem {
       })
       this.free.push(i)
     }
-
-    this._hideAllInstances()
   }
 
-  _hideAllInstances() {
-    for (let i = 0; i < this.pool.length; i++) this._hideInstance(i)
-    this.heads.instanceMatrix.needsUpdate = true
+  /**
+   * three's color_fragment chunk only applies vColor under USE_COLOR, so
+   * instanceColor alone never reaches the fragment shader. vertexColors plus an
+   * all-white geometry colour attribute opens that path; vColor then ends up as
+   * 1 * white * instanceColor, i.e. exactly the per-instance tint.
+   */
+  _makeInstanced(geo, n) {
+    const white = new Float32Array(geo.attributes.position.count * 3).fill(1)
+    geo.setAttribute('color', new THREE.BufferAttribute(white, 3))
+
+    const mesh = new THREE.InstancedMesh(
+      geo,
+      new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, toneMapped: false }),
+      n
+    )
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    mesh.frustumCulled = false
+    // Starts empty. `count` is the live projectile count, rewritten every frame
+    // in update(); see the note there.
+    mesh.count = 0
+    // setColorAt allocates instanceColor on first use.
+    mesh.setColorAt(0, _colFresh)
+    mesh.instanceColor.setUsage(THREE.DynamicDrawUsage)
+    return mesh
   }
 
-  _hideInstance(i) {
-    _mat4.compose(_hidden, _quat, _scaleV)
-    this.heads.setMatrixAt(i, _mat4)
-  }
-
-  spawn(ownerId, ownerTeam, origin, dir, damageScale = 1) {
+  spawn(
+    ownerId,
+    ownerTeam,
+    origin,
+    dir,
+    damageScale = 1,
+    kind = 'blast',
+    mod = null,
+    speed = CFG.proj.speed
+  ) {
     // O(1) free list; the old `pool.find(x => !x.alive)` was a linear scan on
     // every single shot.
     const idx = this.free.pop()
@@ -126,8 +145,11 @@ export class ProjectileSystem {
     p.ownerId = ownerId
     p.ownerTeam = ownerTeam
     p.damageScale = damageScale
+    p.kind = kind
+    p.mod = mod
+    p.speed = speed
     p.pos.copy(origin)
-    p.vel.copy(dir).normalize().multiplyScalar(CFG.proj.speed)
+    p.vel.copy(dir).normalize().multiplyScalar(speed)
     p.age = 0
     p.bounces = 0
     p.trailCount = 0
@@ -142,16 +164,20 @@ export class ProjectileSystem {
    * Bounce count drives the colour, and the jump from 0 -> 1 is deliberately a
    * hard cut rather than a gradient: that is the exact moment the projectile
    * becomes lethal to its own shooter, so it needs to read instantly.
+   *
+   * Rocketiles get their own *fresh* colour but share the armed ramp -- "armed"
+   * has to stay one colour language across every projectile type.
+   *
+   * Only computes `p.color`; the instance attribute is written in update(),
+   * because a projectile's render slot is not its pool slot.
    */
   _applyHeat(p) {
     if (p.bounces === 0) {
-      p.color.copy(_colFresh)
+      p.color.copy(p.kind === 'rocket' ? _colRocket : _colFresh)
     } else {
       const t = clamp((p.bounces - 1) / Math.max(1, CFG.proj.bouncesToFullHeat - 1), 0, 1)
       p.color.copy(_colArmed).lerp(_colHot, t)
     }
-    this.heads.setColorAt(p.index, p.color)
-    this.heads.instanceColor.needsUpdate = true
   }
 
   /** Push the current position onto the head of the trail ring buffer. */
@@ -231,13 +257,103 @@ export class ProjectileSystem {
       }
     }
 
-    // One matrix write per live projectile, one buffer upload for the lot.
-    for (const p of this.active) {
-      _mat4.compose(p.pos, _quat, _scaleV)
-      this.heads.setMatrixAt(p.index, _mat4)
-    }
-    this.heads.instanceMatrix.needsUpdate = true
+    this._writeInstances()
     this._writeTrailBuffer()
+  }
+
+  /**
+   * Pack the live projectiles into contiguous instance slots and set `count` to
+   * how many there are, so the GPU only ever draws what exists.
+   *
+   * The pool slot (`p.index`) is deliberately NOT the render slot. Parking dead
+   * slots off-screen instead -- the obvious approach -- still submits all 96
+   * instances of both meshes every frame: 96 x 140 + 96 x 12 = 14,592 triangles
+   * of nothing, which measured as 74% of the scene's entire triangle count with
+   * zero projectiles in the air.
+   *
+   * `count` is a draw-call argument, not part of the material's program key, so
+   * changing it per frame cannot trigger a shader recompile.
+   */
+  _writeInstances() {
+    let nHeads = 0
+    let nRockets = 0
+
+    for (const p of this.active) {
+      if (p.kind === 'rocket') {
+        // Cones are authored pointing +Y; aim the nose down the velocity so a
+        // homing turn is visible before it reaches you.
+        _dir.copy(p.vel).normalize()
+        _quatR.setFromUnitVectors(_upY, _dir)
+        _mat4.compose(p.pos, _quatR, _scaleV)
+        this.rockets.setMatrixAt(nRockets, _mat4)
+        this.rockets.setColorAt(nRockets, p.color)
+        nRockets++
+      } else {
+        _mat4.compose(p.pos, _quat, _scaleV)
+        this.heads.setMatrixAt(nHeads, _mat4)
+        this.heads.setColorAt(nHeads, p.color)
+        nHeads++
+      }
+    }
+
+    this.heads.count = nHeads
+    this.rockets.count = nRockets
+
+    // Uploading is only worth it when something is actually drawn.
+    if (nHeads) {
+      this.heads.instanceMatrix.needsUpdate = true
+      this.heads.instanceColor.needsUpdate = true
+    }
+    if (nRockets) {
+      this.rockets.instanceMatrix.needsUpdate = true
+      this.rockets.instanceColor.needsUpdate = true
+    }
+  }
+
+  /**
+   * Rocketile guidance. Runs ONCE PER FRAME, before the sweep -- never inside
+   * it. That is the whole safety argument: within any single frame the path is
+   * still a straight segment, so the analytic sweep below keeps its exact
+   * no-tunnelling guarantee no matter how hard the thing is turning.
+   *
+   * Target selection runs the same arming predicate as damage, which is why a
+   * bounced rocketile will happily come around and hunt the player who fired it.
+   */
+  _home(p, dt, game) {
+    const R = CFG.powerups.rocket
+
+    let best = null
+    let bestD = R.seekRadius
+    for (const bot of game.bots) {
+      if (!bot.alive) continue
+      if (bot.id === p.ownerId && p.bounces === 0) continue
+      const d = bot.pos.distanceTo(p.pos)
+      if (d < bestD) {
+        bestD = d
+        best = bot
+      }
+    }
+    if (!best) return
+
+    _seek.subVectors(best.pos, p.pos)
+    if (_seek.lengthSq() < 1e-8) return
+    _seek.normalize()
+    _dir.copy(p.vel).normalize()
+
+    const angle = Math.acos(clamp(_dir.dot(_seek), -1, 1))
+    if (angle < 1e-4) return
+
+    // Rotate about the cross product for an exact constant-rate turn; lerping
+    // the two directions collapses to zero on a 180 degree reversal.
+    _axis.crossVectors(_dir, _seek)
+    if (_axis.lengthSq() < 1e-8) {
+      _axis.set(-_dir.y, _dir.x, 0)
+      if (_axis.lengthSq() < 1e-8) _axis.set(0, -_dir.z, _dir.y)
+    }
+    _axis.normalize()
+
+    _dir.applyAxisAngle(_axis, Math.min(angle, R.turnRate * dt)).normalize()
+    p.vel.copy(_dir).multiplyScalar(p.speed)
   }
 
   /**
@@ -252,7 +368,10 @@ export class ProjectileSystem {
   _step(p, dt, game) {
     p.age += dt
 
-    let remaining = CFG.proj.speed * dt
+    // Steer first, sweep second. See _home().
+    if (p.kind === 'rocket' && p.age >= CFG.powerups.rocket.armDelay) this._home(p, dt, game)
+
+    let remaining = p.speed * dt
     let bouncesThisFrame = 0
     _dir.copy(p.vel).normalize()
 
@@ -280,8 +399,30 @@ export class ProjectileSystem {
         if (!bot.alive) continue
         // THE arming rule: a projectile ignores only its own shooter, and only
         // until it has bounced once. After that it is live against everyone,
-        // the owner included.
+        // the owner included. It gates the shield too, so a shielded bot can
+        // still fire out through its own bubble.
         if (bot.id === p.ownerId && p.bounces === 0) continue
+
+        const sr = bot.shieldRadius || 0
+        if (sr > 0) {
+          const rr = sr + CFG.proj.radius
+          // Only reflects from OUTSIDE. raySphere returns the exit point when
+          // the origin is already inside, and reflecting there on an outward
+          // normal would fire the shot straight back in -- trapped forever.
+          // A projectile caught inside the bubble falls through to the body.
+          if (bot.pos.distanceToSquared(p.pos) > rr * rr) {
+            const ts = raySphere(p.pos, _dir, bestT, bot.pos, rr)
+            if (ts >= 0) {
+              bestT = ts
+              hitKind = 'shield'
+              hitObj = bot
+            }
+            // The body sphere is strictly inside the shield sphere, so if the
+            // shield was missed the body cannot be hit either.
+            continue
+          }
+        }
+
         const t = raySphere(p.pos, _dir, bestT, bot.pos, bot.radius + CFG.proj.radius)
         if (t >= 0) {
           bestT = t
@@ -296,6 +437,11 @@ export class ProjectileSystem {
       if (!hitKind) break
 
       if (hitKind === 'bot') {
+        // Frostiles freeze on a direct hit only. Applied before the damage pair
+        // below so nothing gets between setDamageContext and takeDamage.
+        if (p.mod === 'frost') {
+          hitObj.applySlow?.(CFG.powerups.frost.slowDuration, CFG.powerups.frost.speedMul)
+        }
         // Must be set BEFORE takeDamage: a lethal hit runs onBotKilled
         // synchronously, and the kill feed reads the bounce count from here.
         game.setDamageContext(p)
@@ -308,6 +454,9 @@ export class ProjectileSystem {
       if (hitKind === 'wall') {
         _normal.copy(_wallNormal)
       } else {
+        // Debris and shields alike: outward from the sphere centre. A shield
+        // bounce is a bounce in every sense -- it increments the count and so
+        // arms the shot against whoever fired it. That is the point of it.
         _normal.subVectors(p.pos, hitObj.pos)
         if (_normal.lengthSq() < 1e-8) _normal.set(0, 1, 0)
         _normal.normalize()
@@ -321,7 +470,7 @@ export class ProjectileSystem {
       bouncesThisFrame++
       this._applyHeat(p)
       this._pushTrail(p) // kink the trail exactly at the contact point
-      game.onProjectileBounce(p, _normal)
+      game.onProjectileBounce(p, _normal, hitKind)
     }
 
     return 'alive'
@@ -331,14 +480,15 @@ export class ProjectileSystem {
     if (!p.alive) return
     p.alive = false
     p.trailCount = 0
-    this._hideInstance(p.index)
     this.free.push(p.index)
   }
 
   clear() {
     for (const p of this.active) this._recycle(p)
     this.active.length = 0
-    this.heads.instanceMatrix.needsUpdate = true
+    // Nothing live means nothing drawn -- no need to park anything off-screen.
+    this.heads.count = 0
+    this.rockets.count = 0
     this.trailGeo.setDrawRange(0, 0)
   }
 

@@ -11,9 +11,42 @@
   <body>
     <canvas id="scene"></canvas>
 
+    <!--
+      Powerup glyphs, defined once and <use>d by both the HUD widget and the
+      world-space nameplates. The project ships no image assets -- everything
+      visual is either generated at runtime or inline SVG like this.
+    -->
+    <svg id="glyphs" aria-hidden="true" style="position: absolute; width: 0; height: 0">
+      <symbol id="gl-shield" viewBox="0 0 24 24">
+        <path d="M12 2.5 20 6v6.2c0 4.6-3.3 8-8 9.3-4.7-1.3-8-4.7-8-9.3V6z" />
+      </symbol>
+      <symbol id="gl-boost" viewBox="0 0 24 24">
+        <path d="M13.5 2 5 13.2h5.2L9.5 22 19 10.4h-5.4z" />
+      </symbol>
+      <symbol id="gl-frost" viewBox="0 0 24 24">
+        <path
+          d="M12 2v20M3.3 7l17.4 10M20.7 7 3.3 17M12 5.6 9.2 3.4M12 5.6l2.8-2.2M12 18.4l-2.8 2.2M12 18.4l2.8 2.2"
+        />
+      </symbol>
+      <symbol id="gl-rocket" viewBox="0 0 24 24">
+        <path d="M12 2c3.4 3 5 6.7 5 10.6L12 18l-5-5.4C7 8.7 8.6 5 12 2z" />
+        <path d="M7.6 15 5 20l4.4-1.8M16.4 15l2.6 5-4.4-1.8" />
+      </symbol>
+      <symbol id="gl-sound-on" viewBox="0 0 24 24">
+        <path d="M4 9.5h3.6L12.5 5v14L7.6 14.5H4z" />
+        <path d="M15.8 8.6a5 5 0 0 1 0 6.8M18.6 6a8.6 8.6 0 0 1 0 12" fill="none" />
+      </symbol>
+      <symbol id="gl-sound-off" viewBox="0 0 24 24">
+        <path d="M4 9.5h3.6L12.5 5v14L7.6 14.5H4z" />
+        <path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" />
+      </symbol>
+    </svg>
+
     <!-- ===================== HUD ===================== -->
     <div id="hud" class="hidden">
       <div id="vignette"></div>
+      <div id="frost"><div class="frost-rime"></div></div>
+      <div id="frost-label" class="hidden">SYSTEMS FROZEN</div>
       <div id="nameplates"></div>
 
       <div id="crosshair">
@@ -40,6 +73,22 @@
 
       <div id="warn-inbound" class="hidden">INCOMING RICOCHET</div>
 
+      <div id="powerup" class="hidden">
+        <svg class="pu-ring" viewBox="0 0 100 100" width="76" height="76">
+          <circle class="pu-ring-bg" cx="50" cy="50" r="42" />
+          <circle id="powerup-ring" cx="50" cy="50" r="42" transform="rotate(-90 50 50)" />
+        </svg>
+        <svg class="pu-glyph" viewBox="0 0 24 24" width="34" height="34">
+          <use id="powerup-glyph" href="#gl-shield" />
+        </svg>
+        <div id="powerup-label"></div>
+      </div>
+
+      <div id="powerup-toast" class="hidden">
+        <div class="pt-label"></div>
+        <div class="pt-blurb"></div>
+      </div>
+
       <div id="bottom-left">
         <div class="stat-label">INTEGRITY</div>
         <div class="bar hp"><div id="hp-fill" class="fill"></div></div>
@@ -56,6 +105,18 @@
 
       <div id="killfeed"></div>
 
+      <div id="powerup-debug" class="hidden">
+        <div class="pd-title">POWERUP DEBUG · F2</div>
+        <div class="pd-keys">
+          <span><kbd>1</kbd> shield</span>
+          <span><kbd>2</kbd> permaboost</span>
+          <span><kbd>3</kbd> frostiles</span>
+          <span><kbd>4</kbd> rocketiles</span>
+          <span><kbd>0</kbd> clear</span>
+        </div>
+        <div class="pd-note">Grants are free — the 4-per-match budget is untouched.</div>
+      </div>
+
       <div id="debug" class="hidden"></div>
     </div>
 
@@ -69,18 +130,17 @@
           <strong>After its first bounce, your own shot will kill you.</strong>
         </p>
 
-        <div class="controls">
-          <div class="ctrl-col">
-            <div class="ctrl">
-              <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Thrust</span>
-            </div>
-            <div class="ctrl"><kbd>Space</kbd><span>Ascend</span></div>
-            <div class="ctrl"><kbd>Shift</kbd><span>Descend</span></div>
-          </div>
-          <div class="ctrl-col">
-            <div class="ctrl"><kbd>Q</kbd><kbd class="alt">RMB</kbd><span>Boost dash</span></div>
-            <div class="ctrl"><kbd>Mouse</kbd><span>Aim</span></div>
-            <div class="ctrl"><kbd>LMB</kbd><span>Fire</span></div>
+        <!-- Controls and the powerup guide are built once in ui/overlays.js and
+             injected into every screen that asks for them, so the pause menu can
+             never drift out of sync with the title screen. -->
+        <div class="controls" data-controls-group="title"></div>
+
+        <div class="powerup-guide" data-powerup-group="title">
+          <div class="pg-label">POWERUPS</div>
+          <div class="pg-list"></div>
+          <div class="pg-note">
+            Four spawn per match — one of each, and that is all anybody gets. One slot, no swapping.
+            Everything expires in 8s.
           </div>
         </div>
 
@@ -89,6 +149,8 @@
           <div class="diff-options"></div>
           <div class="diff-blurb"></div>
         </div>
+
+        <div class="sound-row" data-sound-group="title"></div>
 
         <button id="btn-play">CLICK TO ENGAGE</button>
         <p id="loading">loading assets…</p>
@@ -122,12 +184,16 @@
         <h1 class="paused">PAUSED</h1>
         <p class="tagline">Pointer released.</p>
 
+        <div class="controls" data-controls-group="paused"></div>
+
         <div class="difficulty" data-difficulty-group="paused">
           <div class="diff-label">THREAT LEVEL</div>
           <div class="diff-options"></div>
           <div class="diff-blurb"></div>
           <div class="diff-note">Applies immediately — no need to restart.</div>
         </div>
+
+        <div class="sound-row" data-sound-group="paused"></div>
 
         <button id="btn-resume">RESUME</button>
       </section>

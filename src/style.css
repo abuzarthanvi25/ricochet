@@ -52,6 +52,63 @@ canvas#scene {
   transition: opacity 0.25s ease-out;
 }
 
+/* ---- frostile hit ---- */
+
+/* Deliberately blue and edge-weighted so it never reads as the red damage
+   vignette. Two layers: a cold wash creeping in from the corners, and a
+   crystalline rime that only shows at the very edges of the screen. */
+#frost {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  /* Saturated blue, not a white wash. An earlier pass greyed the whole scene
+     out and read as fog rather than ice. */
+  background: radial-gradient(
+    ellipse at center,
+    transparent 38%,
+    rgba(58, 132, 224, 0.34) 76%,
+    rgba(122, 184, 255, 0.72) 100%,
+    rgba(214, 240, 255, 0.92) 125%
+  );
+  transition: opacity 0.18s linear;
+}
+
+/* Crystalline rime, confined hard to the outer edge. Conic slivers from the
+   centre become long radial streaks if you let them run — which reads as speed
+   lines, exactly the wrong metaphor and a direct clash with permaboost. The
+   mask keeps them in the outermost ~20% where they read as ice on glass. */
+#frost .frost-rime {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-conic-gradient(
+      from 0deg at 50% 50%,
+      rgba(198, 231, 255, 0.55) 0deg 0.7deg,
+      transparent 0.7deg 6deg
+    ),
+    repeating-conic-gradient(
+      from 3deg at 50% 50%,
+      rgba(236, 250, 255, 0.4) 0deg 0.35deg,
+      transparent 0.35deg 11deg
+    );
+  -webkit-mask-image: radial-gradient(ellipse at center, transparent 80%, #000 104%);
+  mask-image: radial-gradient(ellipse at center, transparent 80%, #000 104%);
+  mix-blend-mode: screen;
+}
+
+#frost-label {
+  position: absolute;
+  left: 50%;
+  top: calc(50% - 96px);
+  transform: translateX(-50%);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: #d6f0ff;
+  text-shadow: 0 0 14px rgba(122, 184, 255, 0.9);
+  animation: pulse 0.7s ease-in-out infinite alternate;
+}
+
 /* ---- crosshair ---- */
 
 #crosshair {
@@ -145,6 +202,115 @@ canvas#scene {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* ---- equipped powerup ---- */
+
+#powerup {
+  position: absolute;
+  left: 34px;
+  /* Clears #bottom-left (INTEGRITY label sits at roughly 96px) plus room for
+     this widget's own label underneath it. */
+  bottom: 132px;
+  width: 76px;
+  height: 76px;
+  /* Tinted per type from the registry; every child inherits it. */
+  color: var(--cyan);
+}
+
+#powerup .pu-ring {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+#powerup .pu-ring-bg {
+  fill: rgba(5, 7, 13, 0.55);
+  stroke: rgba(223, 246, 255, 0.14);
+  stroke-width: 3;
+}
+
+/* Same trick as #cooldown-ring: dasharray = circumference, animate the offset. */
+#powerup-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dashoffset: 0;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+#powerup .pu-glyph {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+#powerup-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+  color: currentColor;
+  opacity: 0.85;
+}
+
+/* Last two seconds: pulse so the expiry is never a surprise. */
+#powerup.expiring .pu-glyph,
+#powerup.expiring #powerup-ring {
+  animation: pulse 0.34s ease-in-out infinite alternate;
+}
+
+#powerup-toast {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 108px);
+  transform: translateX(-50%);
+  text-align: center;
+  animation: toast 2.4s ease-out forwards;
+}
+
+#powerup-toast .pt-label {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-shadow: 0 0 14px currentColor;
+}
+
+#powerup-toast .pt-blurb {
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  opacity: 0.75;
+  color: #dff6ff;
+}
+
+@keyframes toast {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  12% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 
@@ -269,6 +435,9 @@ canvas#scene {
 #killfeed .line .bot {
   color: var(--red);
 }
+#killfeed .line .pu {
+  color: var(--amber);
+}
 #killfeed .line .verb {
   opacity: 0.5;
   margin: 0 7px;
@@ -350,6 +519,70 @@ canvas#scene {
   box-shadow: 0 0 10px #fff;
 }
 
+.nameplate .np-badge {
+  display: none;
+  width: 15px;
+  height: 15px;
+  margin: 4px auto 0;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px currentColor);
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+/* ---- powerup debug mode ---- */
+
+/* Bottom-right is the only free corner: the killfeed and the lil-gui perf panel
+   both live at top-right, and stats-gl plus the F3 readout own top-left. */
+#powerup-debug {
+  position: absolute;
+  bottom: 30px;
+  right: 26px;
+  padding: 10px 14px;
+  text-align: right;
+  background: rgba(5, 7, 13, 0.72);
+  border: 1px solid rgba(255, 194, 61, 0.45);
+  color: var(--amber);
+}
+
+#powerup-debug .pd-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  margin-bottom: 7px;
+}
+
+#powerup-debug .pd-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #dff6ff;
+}
+
+#powerup-debug kbd {
+  display: inline-block;
+  min-width: 17px;
+  margin-right: 6px;
+  padding: 1px 0;
+  text-align: center;
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid rgba(223, 246, 255, 0.35);
+  border-radius: 2px;
+}
+
+#powerup-debug .pd-note {
+  margin-top: 8px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+  color: #dff6ff;
+}
+
 /* ---- debug ---- */
 
 #debug {
@@ -388,6 +621,11 @@ canvas#scene {
   text-align: center;
   padding: 30px;
   max-width: 720px;
+  /* The title screen carries controls, the powerup legend and the difficulty
+     picker; on a short window that overflows a centred flex child, which clips
+     rather than scrolls. */
+  max-height: 100vh;
+  overflow-y: auto;
 }
 
 .screen h1 {
@@ -500,6 +738,153 @@ button:disabled {
   cursor: default;
   transform: none;
   box-shadow: none;
+}
+
+/* ---- sound toggle ---- */
+
+.sound-row {
+  margin-bottom: 22px;
+}
+
+button.sound-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 20px;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  font-weight: 700;
+  color: rgba(223, 246, 255, 0.72);
+  background: transparent;
+  border: 1px solid rgba(223, 246, 255, 0.25);
+  box-shadow: none;
+}
+button.sound-btn:hover {
+  transform: none;
+  color: #dff6ff;
+  border-color: rgba(223, 246, 255, 0.55);
+  box-shadow: none;
+}
+
+button.sound-btn .sound-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+button.sound-btn.muted {
+  color: rgba(223, 246, 255, 0.38);
+  border-color: rgba(223, 246, 255, 0.15);
+}
+
+/* ---- powerup legend ---- */
+
+.powerup-guide {
+  margin-bottom: 30px;
+}
+
+.pg-label {
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  opacity: 0.45;
+  margin-bottom: 12px;
+}
+
+.pg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: left;
+  /* Narrower than the screen so the name column lines up under itself and the
+     blurbs read as one block rather than four ragged lines. */
+  max-width: 580px;
+  margin: 0 auto;
+}
+
+.pg-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.pg-icon {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.pg-name {
+  flex: 0 0 96px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  font-size: 11px;
+}
+
+.pg-blurb {
+  color: #dff6ff;
+  opacity: 0.55;
+  letter-spacing: 0.04em;
+}
+
+.pg-note {
+  margin-top: 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  opacity: 0.4;
+}
+
+/* The title screen carries the tagline, controls, powerup legend, difficulty
+   picker and the play button. At full size that stacks to ~800px, which pushes
+   CLICK TO ENGAGE below the fold on a 768p laptop. Compact rather than rely on
+   the scrollbar -- nobody scrolls a title screen to find the start button. */
+@media (max-height: 860px) {
+  .screen {
+    padding: 14px 30px;
+  }
+  .screen h1 {
+    font-size: 48px;
+    margin-bottom: 10px;
+  }
+  .screen h1.paused {
+    font-size: 38px;
+  }
+  .tagline {
+    font-size: 14px;
+    line-height: 1.55;
+    margin-bottom: 18px;
+  }
+  .controls {
+    margin-bottom: 20px;
+  }
+  .ctrl-col {
+    gap: 8px;
+  }
+  .powerup-guide,
+  .difficulty {
+    margin-bottom: 18px;
+  }
+  .pg-list {
+    gap: 5px;
+  }
+  .pg-note {
+    margin-top: 9px;
+  }
+  button {
+    padding: 12px 36px;
+    font-size: 15px;
+  }
 }
 
 /* ---- difficulty selector ---- */
