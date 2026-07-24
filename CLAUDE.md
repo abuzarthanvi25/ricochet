@@ -182,8 +182,14 @@ the mine's blast (credited to the shot's owner) and consumes the shot — no
 separate projectile detonation, or the damage double-counts. The mine blast is
 **neutral and NOT difficulty-scaled** (`Game.detonateMine`), and it sets
 `damageContext.source = 'mine'` so the kill feed reads MINE; `attackerId === -1`
-means a contact kill scored for no one. All three mine materials are flat-shaded
-Lambert, so they share the arena-debris program — mines add no new program key.
+means a contact kill scored for no one. **All mines are one `InstancedMesh`** of a
+merged body+spikes geometry (`mines.js` `buildMineGeometry`) — one draw call for
+all five, sharing the flat-shaded Lambert instanced program the arena debris
+already compiled, so mines add no new program key. `frustumCulled` is off (the
+per-instance matrices spin each frame); a dead mine scales to zero. The merged
+geometry must be all-non-indexed — the cones are `toNonIndexed()` before merge,
+because `mergeGeometries` returns **null** on an indexed/non-indexed mismatch and
+a null geometry crashes the renderer.
 
 **Shot-vs-shot ricochet runs once per frame, AFTER the sweeps.**
 `ProjectileSystem._resolveCollisions` compares each pair's swept segment

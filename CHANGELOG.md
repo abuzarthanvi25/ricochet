@@ -77,6 +77,16 @@ projectile-speed option.
 - **Boost is `Q` only.** It used to double up on the right mouse button, which
   dashed newcomers into a wall on the natural "aim" reflex; RMB is now unbound.
 
+### Performance
+
+- **Mines are one instanced draw call**, not 65 meshes. Each mine was a body plus
+  twelve spike meshes; a body and its spikes are now merged into one geometry and
+  all five mines share a single `InstancedMesh` — so up to 65 draw calls collapse
+  to 1, and the mines share the arena-debris shader program instead of adding
+  their own. CPU update time (0.76ms) and the O(n²) shot-collision pass (0.075ms
+  at a full 96-projectile pool) both profiled clean, so no other change was
+  needed.
+
 ### Fixed
 
 - **Flash of unstyled content on load.** `style.css` is imported by `main.js`, so
