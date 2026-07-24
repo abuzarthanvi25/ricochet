@@ -1,6 +1,6 @@
 import { DIFFICULTIES } from '../core/difficulty.js'
 import { POWERUPS } from '../core/powerups.js'
-import { SENS_MIN, SENS_MAX } from '../core/settings.js'
+import { SENS_MIN, SENS_MAX, PROJ_MIN, PROJ_MAX } from '../core/settings.js'
 
 const $ = (id) => document.getElementById(id)
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`
@@ -52,6 +52,7 @@ export class Overlays {
     this._onFlightAssistToggle = null
     this._onAimAssistToggle = null
     this._onSensitivityChange = null
+    this._onProjSpeedChange = null
     this._buildDifficultyControls()
     this._buildControls()
     this._buildPowerupGuide()
@@ -68,28 +69,35 @@ export class Overlays {
     for (const group of this.optionGroups) {
       group.append(
         this._toggleButton('flight', 'FLIGHT ASSIST', () => this._onFlightAssistToggle?.()),
-        this._toggleButton('aim', 'AIM ASSIST', () => this._onAimAssistToggle?.())
+        this._toggleButton('aim', 'AIM ASSIST', () => this._onAimAssistToggle?.()),
+        this._slider('sens', 'SENSITIVITY', SENS_MIN, SENS_MAX, 0.05, (v) =>
+          this._onSensitivityChange?.(v)
+        ),
+        this._slider('proj', 'SHOT SPEED', PROJ_MIN, PROJ_MAX, 0.05, (v) =>
+          this._onProjSpeedChange?.(v)
+        )
       )
-
-      const slider = document.createElement('label')
-      slider.className = 'opt-slider'
-      const cap = document.createElement('span')
-      cap.className = 'opt-cap'
-      cap.textContent = 'SENSITIVITY'
-      const input = document.createElement('input')
-      input.type = 'range'
-      input.className = 'sens-input'
-      input.min = SENS_MIN
-      input.max = SENS_MAX
-      input.step = '0.05'
-      const val = document.createElement('span')
-      val.className = 'opt-val'
-      input.addEventListener('input', (e) =>
-        this._onSensitivityChange?.(parseFloat(e.target.value))
-      )
-      slider.append(cap, input, val)
-      group.append(slider)
     }
+  }
+
+  _slider(key, label, min, max, step, onInput) {
+    const wrap = document.createElement('label')
+    wrap.className = 'opt-slider'
+    wrap.dataset.slider = key
+    const cap = document.createElement('span')
+    cap.className = 'opt-cap'
+    cap.textContent = label
+    const input = document.createElement('input')
+    input.type = 'range'
+    input.className = 'opt-input'
+    input.min = min
+    input.max = max
+    input.step = step
+    const val = document.createElement('span')
+    val.className = 'opt-val'
+    input.addEventListener('input', (e) => onInput(parseFloat(e.target.value)))
+    wrap.append(cap, input, val)
+    return wrap
   }
 
   _toggleButton(opt, label, onClick) {
@@ -123,6 +131,10 @@ export class Overlays {
     this._onSensitivityChange = fn
   }
 
+  onProjSpeedChange(fn) {
+    this._onProjSpeedChange = fn
+  }
+
   _setToggle(opt, on) {
     for (const group of this.optionGroups) {
       const btn = group.querySelector(`.opt-btn[data-opt="${opt}"]`)
@@ -140,13 +152,21 @@ export class Overlays {
     this._setToggle('aim', on)
   }
 
-  setSensitivity(mul) {
+  _setSlider(key, mul) {
     for (const group of this.optionGroups) {
-      const input = group.querySelector('.sens-input')
-      const val = group.querySelector('.opt-val')
-      if (input) input.value = mul
-      if (val) val.textContent = `${mul.toFixed(2)}×`
+      const wrap = group.querySelector(`.opt-slider[data-slider="${key}"]`)
+      if (!wrap) continue
+      wrap.querySelector('.opt-input').value = mul
+      wrap.querySelector('.opt-val').textContent = `${mul.toFixed(2)}×`
     }
+  }
+
+  setSensitivity(mul) {
+    this._setSlider('sens', mul)
+  }
+
+  setProjSpeed(mul) {
+    this._setSlider('proj', mul)
   }
 
   /** Same toggle on the title screen and the pause menu. */

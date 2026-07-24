@@ -9,11 +9,29 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-A newcomer-experience pass: the game was too punishing for a first-time player
-even on the old easiest tier, so this softens the landing without changing what
-the game is at the top.
+A newcomer-experience pass — softening the landing for a first-time player who
+found the game too punishing even on the old easiest tier — plus a set of new
+combat mechanics: floating mines, shots that ricochet off each other, and a
+projectile-speed option.
 
 ### Added
+
+- **Floating mines** — a fixed number of spiked sea-mines are placed at match
+  start and stay put; they do not respawn. Touch one, or hit one with any shot,
+  and it detonates for heavy damage across a wide radius — enough to bait a bot
+  into. A mine you set off with your own shot is **credited to you**; a bot that
+  flies into one dies environmental, scored for no one. Neutral and **not**
+  difficulty-scaled — a hazard is a hazard. Shots test them as analytic spheres,
+  so a fast shot cannot tunnel through one.
+- **Shots ricochet off each other.** Two projectiles that cross in mid-air
+  deflect, and each crossing counts as a bounce — so **both arm** against their
+  own shooters. Deliberately knocking a shot off course (or banking one back into
+  yourself) becomes a real tactic. Detection is a swept closest-approach over each
+  frame, so a crossing is caught even at full speed and never tunnels; it runs
+  after the wall/debris/bot sweeps, so it cannot disturb their exact guarantee.
+- **Projectile-speed slider** in the options — scales every shot from 0.6× to
+  1.6×, persisted. It flows through the same value the enemy lead-aim solver
+  reads, so faster shots are still led correctly.
 
 - **CADET difficulty** — a new easiest tier below RECRUIT, and the default. One
   bot fires at a time, with a wide aim cone, slow cadence and low damage.
@@ -38,9 +56,9 @@ the game is at the top.
   adds no shader-program surface. Answers the "where did that shot come from"
   problem that 6-DOF makes acute.
 - **Options on the title screen and pause menu** — flight-assist and aim-assist
-  toggles plus a mouse-sensitivity slider, built once and injected into both
-  screens (the same shared-builder pattern as the sound toggle), and persisted to
-  `localStorage`.
+  toggles plus mouse-sensitivity and shot-speed sliders, built once and injected
+  into both screens (the same shared-builder pattern as the sound toggle), and
+  persisted to `localStorage`.
 
 ### Changed
 

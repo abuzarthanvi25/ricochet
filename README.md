@@ -78,8 +78,9 @@ the first hour easier without changing what the game is:
 - **Aim assist** bends a fresh shot toward the enemy nearest your crosshair,
   within a narrow cone. Its strength comes from the difficulty (strong on CADET,
   off on SOLDIER/VETERAN) and there is a global on/off toggle.
-- A **sensitivity slider** scales mouse look; both toggles and the slider live on
-  the title screen and the pause menu and persist to `localStorage`.
+- **Sensitivity** and **shot-speed** sliders scale mouse look and projectile
+  speed (0.6×–1.6×); both toggles and both sliders live on the title screen and
+  the pause menu and persist to `localStorage`.
 - A **radar disc** (bottom-right) puts you at the centre with red blips for the
   bots — screen-up is your heading, so an enemy behind you shows up below centre,
   with a short stalk for above/below. It answers the "where did that shot come
@@ -164,6 +165,24 @@ square on.
 
 Bots break off to grab a pickup within 22 units and their nameplate shows what
 they are carrying. Die and you drop it.
+
+## Hazards & shot ricochet
+
+**Floating mines.** A fixed number of spiked sea-mines are placed at the start of
+each match and stay put — they do not respawn, so a match is a minefield you can
+learn and clear. Touch one, or hit one with any shot, and it detonates for heavy
+damage across a wide radius. A mine you set off with your own shot is **credited
+to you**; a bot that blunders into one dies for no one's score, so herding a bot
+onto a mine is a genuine play. The blast is neutral and not difficulty-scaled —
+it hurts everyone in range, you included. Shots test mines as analytic spheres,
+so a fast shot cannot punch through one without setting it off.
+
+**Shots ricochet off each other.** Two projectiles that cross in mid-air deflect,
+and — because a deflection is a bounce — **both arm against their own shooters**.
+It is rare by accident and powerful on purpose: knock an incoming shot off line,
+or bank one off another to send it somewhere the wall geometry never would. The
+crossing is detected as a swept closest-approach each frame, so it triggers even
+at full speed and never tunnels.
 
 ## Difficulty
 

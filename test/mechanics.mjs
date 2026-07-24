@@ -957,5 +957,126 @@ console.log('\n== maxHp respawn + regen ==')
   ok('no regen when the rate is 0', regenStep(50, 100, 10, 0, 1) === 50)
 }
 
+console.log('\n== projectile speed ==')
+{
+  const s = await import('../src/core/settings.js')
+  ok('projectile speed defaults to 1x', s.getProjSpeedMul() === 1)
+  ok('clamps below the floor', s.setProjSpeedMul(0.1) === s.PROJ_MIN)
+  ok('clamps above the ceiling', s.setProjSpeedMul(9) === s.PROJ_MAX)
+  const mid = (s.PROJ_MIN + s.PROJ_MAX) / 2
+  ok('keeps an in-range value', Math.abs(s.setProjSpeedMul(mid) - mid) < 1e-9)
+  s.setProjSpeedMul(1) // restore for any later import
+}
+
+console.log('\n== mines ==')
+{
+  const { MineField } = await import('../src/core/mines.js')
+  const field = new MineField({ add() {} })
+  ok('builds the configured number of mines', field.mines.length === CFG.mines.count)
+
+  let k = 0
+  const detonated = []
+  const game = {
+    bots: [],
+    arena: { findSpawn: () => new THREE.Vector3(k++ * 6 - 12, 0, 0) },
+    detonateMine(pos, attackerId) {
+      detonated.push({ pos: pos.clone(), attackerId })
+    },
+  }
+  field.reset(game)
+  ok('reset arms every mine', field.active === CFG.mines.count)
+
+  // A bot flying into one sets it off environmentally (attacker -1).
+  const bot = { alive: true, radius: CFG.bot.radius, pos: field.mines[0].pos.clone() }
+  game.bots = [bot]
+  field.update(1 / 60, game)
+  ok(
+    'a bot touching a mine sets it off',
+    !field.mines[0].alive && field.active === CFG.mines.count - 1
+  )
+  ok('a contact hit is environmental (attacker -1)', detonated.at(-1).attackerId === -1)
+
+  // explode() credits whoever is passed (a shot's owner).
+  const before = field.active
+  field.explode(field.mines[1], 7, game)
+  ok(
+    'a shot-triggered mine credits the shooter',
+    detonated.at(-1).attackerId === 7 && field.active === before - 1
+  )
+  const count = detonated.length
+  field.explode(field.mines[1], 7, game)
+  ok('re-exploding a dead mine is a no-op', detonated.length === count)
+}
+
+console.log('\n== projectile hits a mine ==')
+{
+  const { ProjectileSystem } = await import('../src/weapons/projectiles.js')
+  const sys = new ProjectileSystem({ add() {} })
+  const mine = { alive: true, radius: CFG.mines.radius, pos: new THREE.Vector3(0, 0, -12) }
+  const hits = []
+  const game = {
+    arena: { debris: [] },
+    // Owner parked far away so it cannot be the thing the shot hits.
+    bots: [{ id: 1, alive: true, radius: CFG.bot.radius, pos: new THREE.Vector3(0, 0, 200) }],
+    mines: { mines: [mine] },
+    onProjectileHitMine(p, m) {
+      hits.push({ owner: p.ownerId })
+      m.alive = false
+    },
+    damageContext: { bounces: 0, ownerId: -1 },
+    setDamageContext() {},
+    detonate() {},
+    onProjectileBounce() {},
+  }
+  sys.spawn(1, 'player', new THREE.Vector3(0, 0, -2), new THREE.Vector3(0, 0, -1))
+  for (let i = 0; i < 60 && sys.active.length; i++) sys.update(1 / 60, game)
+  ok(
+    'a shot detonates a mine it hits, credited to its owner',
+    hits.length === 1 && hits[0].owner === 1
+  )
+  ok('the mine hit consumes the shot', sys.active.length === 0)
+}
+
+console.log('\n== projectile-vs-projectile ricochet ==')
+{
+  const { ProjectileSystem } = await import('../src/weapons/projectiles.js')
+  const sys = new ProjectileSystem({ add() {} })
+  const game = {
+    arena: { debris: [] },
+    bots: [],
+    mines: { mines: [] },
+    damageContext: { bounces: 0, ownerId: -1 },
+    setDamageContext() {},
+    detonate() {},
+    onProjectileBounce() {},
+  }
+
+  // Two shots fired head-on along Z. They cross at the origin and must deflect,
+  // and each collision counts as a bounce so BOTH arm.
+  const a = sys.spawn(1, 'player', new THREE.Vector3(0, 0, 6), new THREE.Vector3(0, 0, -1))
+  const b = sys.spawn(2, 'enemy', new THREE.Vector3(0, 0, -6), new THREE.Vector3(0, 0, 1))
+  let collided = false
+  for (let i = 0; i < 30 && sys.active.length === 2; i++) {
+    sys.update(1 / 60, game)
+    if (a.bounces > 0 && b.bounces > 0) {
+      collided = true
+      break
+    }
+  }
+  ok('two crossing shots ricochet and both arm', collided && a.bounces > 0 && b.bounces > 0)
+  ok(
+    'and both reverse along the approach axis',
+    a.vel.z > 0 && b.vel.z < 0,
+    `${a.vel.z} ${b.vel.z}`
+  )
+
+  // Two parallel shots far apart must NOT collide (checked before they reach a wall).
+  sys.clear()
+  const c = sys.spawn(1, 'player', new THREE.Vector3(9, 0, 6), new THREE.Vector3(0, 0, -1))
+  const d = sys.spawn(2, 'enemy', new THREE.Vector3(-9, 0, 6), new THREE.Vector3(0, 0, -1))
+  for (let i = 0; i < 20 && sys.active.length; i++) sys.update(1 / 60, game)
+  ok('parallel shots far apart do not ricochet', c.bounces === 0 && d.bounces === 0)
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail ? 1 : 0)

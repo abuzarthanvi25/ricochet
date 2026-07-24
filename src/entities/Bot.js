@@ -3,6 +3,7 @@ import { CFG } from '../config.js'
 import { createBotModel, CLIP } from '../core/assets.js'
 import { clampToArena, resolveSphere } from '../core/collision.js'
 import { clamp, orientToDirection } from '../core/util.js'
+import { getProjSpeedMul } from '../core/settings.js'
 
 let nextId = 1
 
@@ -218,9 +219,11 @@ export class Bot {
    * lead too far.
    */
   projSpeed() {
-    return this.powerup === 'permaboost'
-      ? CFG.proj.speed * CFG.powerups.permaboost.projSpeedMul
-      : CFG.proj.speed
+    // Global player-set multiplier times the permaboost multiplier. Reading it
+    // here is what keeps the enemy lead-aim solver honest -- Enemy._tryFire
+    // solves the intercept with projSpeed(), so both scale together.
+    const base = CFG.proj.speed * getProjSpeedMul()
+    return this.powerup === 'permaboost' ? base * CFG.powerups.permaboost.projSpeedMul : base
   }
 
   // ------------------------------------------------------------------ spawn

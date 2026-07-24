@@ -885,9 +885,9 @@ button.opt-btn.on .opt-dot {
   font-weight: 700;
   color: rgba(223, 246, 255, 0.55);
 }
-.sens-input {
+.opt-input {
   pointer-events: auto;
-  width: 120px;
+  width: 108px;
   accent-color: #35e8ff;
 }
 .opt-val {

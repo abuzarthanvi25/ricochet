@@ -60,6 +60,8 @@ core/
   arena.js     wall box + drifting debris
   difficulty.js presets + localStorage
   powerups.js  registry + the pickups floating in the arena
+  mines.js     finite floating sea-mines (destructible hazards)
+  settings.js  persisted options: flight/aim assist, sensitivity, shot speed
 entities/      Bot (shared base) -> Player, Enemy
 weapons/projectiles.js   stepping, bouncing, arming — the core mechanic
 fx/            explosions, shared light pool, synthesised audio
@@ -172,6 +174,30 @@ Bots must keep their normal drag — their coasting drift is part of how they re
 so it adds zero shader-program surface. Keep it that way; a WebGL radar would be
 new program-key surface on the hottest path. The blip projection is the pure
 `computeBlip()` (unit-tested headless); the class only does the canvas drawing.
+
+**Mines are analytic spheres in the projectile sweep.** `weapons/projectiles.js`
+tests `game.mines.mines` with `raySphere` exactly like debris, so a fast shot
+cannot tunnel one. A hit routes through `game.onProjectileHitMine`, which fires
+the mine's blast (credited to the shot's owner) and consumes the shot — no
+separate projectile detonation, or the damage double-counts. The mine blast is
+**neutral and NOT difficulty-scaled** (`Game.detonateMine`), and it sets
+`damageContext.source = 'mine'` so the kill feed reads MINE; `attackerId === -1`
+means a contact kill scored for no one. All three mine materials are flat-shaded
+Lambert, so they share the arena-debris program — mines add no new program key.
+
+**Shot-vs-shot ricochet runs once per frame, AFTER the sweeps.**
+`ProjectileSystem._resolveCollisions` compares each pair's swept segment
+(`prevPos → pos`) by closest approach, so a crossing is caught even at full speed
+without tunnelling. It deflects both velocities about the contact normal and
+increments `bounces` on both — a mid-air collision arms both shots. It must stay
+after the per-projectile sweeps: those keep the exact wall/debris/bot guarantee,
+and this pass only reads their finished positions. `prevPos` is snapshotted at
+the top of `update()` before anything moves.
+
+**Projectile speed has a global multiplier in `core/settings.js`.** `Bot.projSpeed`
+multiplies `CFG.proj.speed` by `getProjSpeedMul()`, so the options slider scales
+spawned shots AND the enemy lead-aim solver together — never scale one without
+the other, or bots mislead every shot.
 
 ## Conventions
 

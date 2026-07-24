@@ -96,6 +96,26 @@ export const CFG = {
     colorArmed: 0xff5a12,
     colorFullyArmed: 0xffd000,
     bouncesToFullHeat: 4,
+    // Two shots that cross within this distance ricochet off each other and both
+    // arm. Detection is a swept closest-approach over each frame's segment, so it
+    // cannot tunnel; see weapons/projectiles.js _resolveCollisions.
+    crossRadius: 0.7, // ~2 * radius
+  },
+
+  // Finite floating sea-mines. A fixed number are placed at match start and do
+  // not move or respawn -- destructible hazards you can bait bots into. Anything
+  // that touches one, or any projectile that hits one, sets it off; the blast
+  // damages everyone in radius, and a shot-triggered blast is credited to whoever
+  // fired the shot (a bot flying into one is an environmental kill, no score).
+  mines: {
+    count: 5,
+    radius: 1.3, // collision sphere (body + spikes)
+    bodyRadius: 0.85, // visual body sphere
+    spikeLen: 0.7,
+    blastRadius: 6.5,
+    blastDamage: 55, // NOT difficulty-scaled -- a hazard is a hazard
+    blastKnock: 30,
+    color: 0xff5a2a, // body emissive + explosion tint
   },
 
   powerups: {

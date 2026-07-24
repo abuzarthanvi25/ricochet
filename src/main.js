@@ -27,6 +27,8 @@ import {
   saveAimAssist,
   loadSensitivity,
   saveSensitivity,
+  getProjSpeedMul,
+  setProjSpeedMul,
 } from './core/settings.js'
 
 const canvas = document.getElementById('scene')
@@ -144,12 +146,19 @@ function applySensitivity(mul) {
   saveSensitivity(mul)
   overlays.setSensitivity(mul)
 }
+// Projectile speed lives entirely in settings.js (Bot.projSpeed reads it), so
+// it needs no `game` reference and can apply before boot.
+function applyProjSpeed(mul) {
+  overlays.setProjSpeed(setProjSpeedMul(mul))
+}
 overlays.onFlightAssistToggle(() => applyFlightAssist(!flightAssistOn))
 overlays.onAimAssistToggle(() => applyAimAssist(!aimAssistOn))
 overlays.onSensitivityChange((m) => applySensitivity(m))
+overlays.onProjSpeedChange((m) => applyProjSpeed(m))
 applyFlightAssist(flightAssistOn)
 applyAimAssist(aimAssistOn)
 applySensitivity(sensitivity)
+applyProjSpeed(getProjSpeedMul())
 
 overlays.bind({
   onPlay: () => beginMatch(true),
@@ -295,6 +304,7 @@ async function boot() {
       setFlightAssist: applyFlightAssist,
       setAimAssist: applyAimAssist,
       setSensitivity: applySensitivity,
+      setProjSpeed: applyProjSpeed,
     },
   }
 

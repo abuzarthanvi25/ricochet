@@ -8,9 +8,12 @@
 const FA_KEY = 'ricochet.flightassist'
 const AA_KEY = 'ricochet.aimassist'
 const SENS_KEY = 'ricochet.sensitivity'
+const PROJ_KEY = 'ricochet.projspeed'
 
 export const SENS_MIN = 0.3
 export const SENS_MAX = 2.0
+export const PROJ_MIN = 0.6
+export const PROJ_MAX = 1.6
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v)
 
@@ -54,4 +57,28 @@ export function saveSensitivity(mul) {
   } catch {
     /* non-fatal */
   }
+}
+
+// Global projectile-speed multiplier over CFG.proj.speed. Applied in
+// Bot.projSpeed(), so it scales spawned shots AND the enemy lead-aim solver
+// together -- a faster shot the bots still lead correctly. Kept as a live
+// module value the hot path reads, not threaded through every call site.
+let projSpeedMul = 1
+try {
+  const v = parseFloat(localStorage.getItem(PROJ_KEY))
+  if (Number.isFinite(v) && v > 0) projSpeedMul = clamp(v, PROJ_MIN, PROJ_MAX)
+} catch {
+  /* default 1 is fine */
+}
+
+export const getProjSpeedMul = () => projSpeedMul
+
+export function setProjSpeedMul(mul) {
+  projSpeedMul = clamp(mul, PROJ_MIN, PROJ_MAX)
+  try {
+    localStorage.setItem(PROJ_KEY, String(projSpeedMul))
+  } catch {
+    /* non-fatal */
+  }
+  return projSpeedMul
 }
