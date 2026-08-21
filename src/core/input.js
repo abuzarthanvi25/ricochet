@@ -15,7 +15,19 @@ const state = {
   firing: false,
   boostEdge: false,
   locked: false,
+  // Touch-driven analog movement, fed by core/touch.js. Kept in the same state
+  // object as the keyboard so Player.think and the fire/boost paths read one
+  // source: tx/ty are the camera-relative plane (right/forward, [-1,1]), tvert
+  // the world vertical, touchFiring the on-screen fire button. Look drags fold
+  // straight into dx/dy, so the frame loop drains them exactly like a mouse.
+  tx: 0,
+  ty: 0,
+  tvert: 0,
+  touchFiring: false,
 }
+
+// Reused so Player.think reads the touch move vector with no per-frame alloc.
+const _touchMove = { x: 0, y: 0, vert: 0 }
 
 const listeners = { lockChange: [], lockError: [] }
 let canvasEl = null
@@ -36,6 +48,7 @@ export function initInput(canvas) {
   window.addEventListener('blur', () => {
     state.keys.clear()
     state.firing = false
+    clearTouch()
   })
 
   canvas.addEventListener('mousedown', (e) => {
@@ -100,7 +113,56 @@ export function releaseLock() {
 
 export const isLocked = () => state.locked
 export const isDown = (code) => state.keys.has(code)
-export const isFiring = () => state.firing
+// Either input source can fire: mouse button on desktop, on-screen button on touch.
+export const isFiring = () => state.firing || state.touchFiring
+
+// ----------------------------------------------------------------- touch input
+// core/touch.js writes these; nothing else should. Keeping the setters here (not
+// a second input surface) is why the rest of the game never learns it is being
+// driven by a thumb rather than a mouse and keyboard.
+
+/** Analog move on the camera-relative plane. x = strafe, y = forward, each [-1,1]. */
+export function setTouchMove(x, y) {
+  state.tx = x
+  state.ty = y
+}
+
+/** World vertical thrust from the ascend/descend buttons: -1, 0 or +1. */
+export function setTouchVert(v) {
+  state.tvert = v
+}
+
+/** Hold state of the on-screen fire button. */
+export function setTouchFiring(on) {
+  state.touchFiring = on
+}
+
+/** On-screen boost tap. Edge-triggered like the Q key so a held finger cannot chain-dash. */
+export function pressTouchBoost() {
+  state.boostEdge = true
+}
+
+/** A look drag, in pixels. Folded into the same delta buffer the mouse uses. */
+export function addLook(dx, dy) {
+  state.dx += dx
+  state.dy += dy
+}
+
+/** Combined touch movement intent, read once per frame by Player.think. */
+export function getTouchMove() {
+  _touchMove.x = state.tx
+  _touchMove.y = state.ty
+  _touchMove.vert = state.tvert
+  return _touchMove
+}
+
+/** Zero every touch input. Called on blur and when the touch controls hide. */
+export function clearTouch() {
+  state.tx = 0
+  state.ty = 0
+  state.tvert = 0
+  state.touchFiring = false
+}
 
 /** Mouse deltas accumulate between frames and are drained once per update. */
 export function consumeMouse(out) {

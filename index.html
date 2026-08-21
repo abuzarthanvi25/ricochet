@@ -165,6 +165,9 @@
         <div class="menu-buttons">
           <button id="btn-play">CLICK TO ENGAGE</button>
           <button class="btn-open-options" data-return="title" type="button">OPTIONS</button>
+          <!-- Only shown on the compact short-landscape layout, where the inline
+               powerup legend below is folded away to fit the screen. -->
+          <button class="btn-open-powerups" type="button">POWERUPS</button>
         </div>
         <p id="loading">loading assets…</p>
         <p class="credit">Model: <em>Shooter Bot</em> by Aurantiko — CC-BY-4.0</p>
@@ -235,6 +238,34 @@
 
         <button id="btn-options-back" type="button">BACK</button>
       </section>
+    </div>
+
+    <!-- Powerup legend as a full-screen modal, for the compact layout that folds
+         the inline one away. The list inside is filled by the same builder in
+         ui/overlays.js (data-powerup-group), so it can never drift from the
+         title screen's copy. -->
+    <div id="powerup-popup" class="popup hidden">
+      <div class="popup-panel">
+        <div class="popup-head">
+          <span class="popup-title">POWERUPS</span>
+          <button id="btn-powerups-close" type="button" aria-label="Close">✕</button>
+        </div>
+        <div class="powerup-guide" data-powerup-group="popup">
+          <div class="pg-list"></div>
+          <div class="pg-note">
+            Four spawn per match — one of each, and that is all anybody gets. One slot, no swapping.
+            Everything expires in 8s.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Touch devices in portrait: the whole layout assumes landscape, so cover
+         everything with a rotate prompt until the phone is turned. Shown purely
+         by CSS (html.touch + orientation media query); no JS drives it. -->
+    <div id="rotate-hint">
+      <div class="rotate-icon">⟳</div>
+      <p>Rotate your device to landscape</p>
     </div>
 
     <script type="module" src="/src/main.js"></script>

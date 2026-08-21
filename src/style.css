@@ -936,8 +936,9 @@ button.opt-btn.on .opt-dot {
   gap: 12px;
 }
 
-/* Secondary buttons (OPTIONS, BACK): quieter than the primary ENGAGE/RESUME. */
+/* Secondary buttons (OPTIONS, POWERUPS, BACK): quieter than ENGAGE/RESUME. */
 button.btn-open-options,
+button.btn-open-powerups,
 #btn-options-back {
   pointer-events: auto;
   padding: 10px 30px;
@@ -949,11 +950,17 @@ button.btn-open-options,
   box-shadow: none;
 }
 button.btn-open-options:hover,
+button.btn-open-powerups:hover,
 #btn-options-back:hover {
   transform: none;
   color: #dff6ff;
   border-color: rgba(223, 246, 255, 0.6);
   box-shadow: none;
+}
+
+/* The POWERUPS trigger exists only for the compact layout; hidden otherwise. */
+.btn-open-powerups {
+  display: none;
 }
 #btn-options-back {
   margin-top: 14px;
@@ -1144,4 +1151,383 @@ button.diff-btn.active {
 .credit em {
   font-style: normal;
   opacity: 0.75;
+}
+
+/* ========================= TOUCH CONTROLS ========================= */
+/* Everything here is gated on `html.touch` (set by main.js on touch devices),
+   so a desktop build renders none of it. The controls layer sits between the
+   HUD (z 10) and the overlay menus (z 20): live during play, and the paused
+   overlay covers it. Interactive children opt back into pointer events; the
+   container stays transparent to them. */
+
+#touch-controls {
+  display: none;
+}
+html.touch #touch-controls.active {
+  display: block;
+}
+#touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Full-screen look + dynamic-joystick catch layer, behind the buttons. */
+#touch-look {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* Dynamic joystick: base spawns under the thumb (left/top set inline). */
+#touch-joy {
+  position: absolute;
+  width: 124px;
+  height: 124px;
+  margin: -62px 0 0 -62px; /* centre on the spawn point */
+  border-radius: 50%;
+  border: 2px solid rgba(53, 232, 255, 0.4);
+  background: radial-gradient(circle, rgba(53, 232, 255, 0.06), rgba(5, 7, 13, 0.28));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+#touch-joy.on {
+  opacity: 0.9;
+}
+#touch-joy-thumb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  background: rgba(53, 232, 255, 0.22);
+  border: 2px solid rgba(53, 232, 255, 0.7);
+  box-shadow: 0 0 14px rgba(53, 232, 255, 0.4);
+  transform: translate(-50%, -50%);
+}
+
+/* Floating buttons. safe-area insets keep them clear of notches/home bars. */
+.touch-btn {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid rgba(223, 246, 255, 0.35);
+  background: rgba(5, 7, 13, 0.32);
+  color: #dff6ff;
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-align: center;
+  backdrop-filter: blur(2px);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.touch-btn.pressed {
+  background: rgba(53, 232, 255, 0.18);
+  border-color: var(--cyan);
+  box-shadow: 0 0 16px rgba(53, 232, 255, 0.45);
+}
+
+#touch-fire {
+  right: calc(28px + env(safe-area-inset-right));
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  width: 104px;
+  height: 104px;
+  font-size: 15px;
+  color: #ff8a8a;
+  border-color: rgba(255, 51, 85, 0.5);
+  background: rgba(255, 51, 85, 0.12);
+}
+#touch-fire.pressed {
+  background: rgba(255, 51, 85, 0.32);
+  border-color: var(--red);
+  box-shadow: 0 0 20px rgba(255, 51, 85, 0.5);
+}
+#touch-boost {
+  right: calc(150px + env(safe-area-inset-right));
+  bottom: calc(46px + env(safe-area-inset-bottom));
+  width: 72px;
+  height: 72px;
+  font-size: 11px;
+  color: var(--amber);
+  border-color: rgba(255, 176, 32, 0.45);
+}
+#touch-up {
+  right: calc(40px + env(safe-area-inset-right));
+  bottom: calc(150px + env(safe-area-inset-bottom));
+  width: 60px;
+  height: 60px;
+  font-size: 18px;
+}
+#touch-down {
+  right: calc(120px + env(safe-area-inset-right));
+  bottom: calc(150px + env(safe-area-inset-bottom));
+  width: 60px;
+  height: 60px;
+  font-size: 18px;
+}
+#touch-pause {
+  top: calc(14px + env(safe-area-inset-top));
+  left: calc(14px + env(safe-area-inset-left));
+  width: 46px;
+  height: 46px;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+/* --- Mobile HUD reflow: the joystick owns bottom-left and the fire cluster
+   owns bottom-right, so the readouts that lived there move to the top. --- */
+html.touch #bottom-left {
+  left: calc(16px + env(safe-area-inset-left));
+  top: calc(66px + env(safe-area-inset-top));
+  bottom: auto;
+  width: 200px;
+}
+html.touch #powerup {
+  left: calc(20px + env(safe-area-inset-left));
+  top: 150px;
+  bottom: auto;
+}
+html.touch #radar {
+  right: calc(14px + env(safe-area-inset-right));
+  top: calc(14px + env(safe-area-inset-top));
+  bottom: auto;
+}
+html.touch #killfeed {
+  right: calc(16px + env(safe-area-inset-right));
+  top: 196px;
+  width: 240px;
+  font-size: 12px;
+}
+html.touch #scoreboard {
+  top: calc(12px + env(safe-area-inset-top));
+  font-size: 24px;
+}
+
+/* Stop the browser from scrolling/zooming under a drag. */
+html.touch,
+html.touch body,
+html.touch canvas#scene {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+/* ---------------------------- Rotate hint --------------------------- */
+#rotate-hint {
+  display: none;
+}
+@media (orientation: portrait) {
+  html.touch #rotate-hint {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    background: var(--ink);
+    text-align: center;
+    padding: 0 32px;
+  }
+}
+#rotate-hint .rotate-icon {
+  font-size: 64px;
+  color: var(--cyan);
+  animation: rotateHint 2s ease-in-out infinite;
+}
+#rotate-hint p {
+  font-size: 15px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+@keyframes rotateHint {
+  0%,
+  100% {
+    transform: rotate(-15deg);
+  }
+  50% {
+    transform: rotate(75deg);
+  }
+}
+
+/* --------------- Compact overlay for short landscape (phones) --------------- */
+/* A landscape phone is only ~360-420px tall, and the title screen carries the
+   full controls + powerup legend, so a centred .screen overflows and scrolls --
+   a poor first impression. On touch + short landscape only (tablets are taller
+   than 520px, desktop is untouched), tighten the layout so the title and options
+   fit the viewport with no scroll. dvh, not vh, so the mobile URL bar counts. */
+@media (orientation: landscape) and (max-height: 520px) {
+  html.touch .screen {
+    padding: 12px 24px;
+    max-height: 100dvh;
+  }
+  html.touch .screen h1 {
+    font-size: 32px;
+    margin-bottom: 6px;
+  }
+  html.touch .screen h1.paused {
+    font-size: 28px;
+  }
+  html.touch .tagline {
+    font-size: 12px;
+    line-height: 1.4;
+    margin-bottom: 12px;
+  }
+
+  /* Title: the powerup legend is the longest block and pure reference -- drop it
+     here (it is still on the desktop title and readable in-match). */
+  html.touch #screen-title .powerup-guide {
+    display: none;
+  }
+  html.touch .controls {
+    gap: 30px;
+    margin-bottom: 14px;
+    font-size: 11px;
+  }
+  html.touch .ctrl-col {
+    gap: 5px;
+  }
+
+  /* Two buttons side by side instead of stacked, to save a row of height. */
+  html.touch .menu-buttons {
+    flex-direction: row;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  html.touch .screen button {
+    padding: 9px 22px;
+    font-size: 12px;
+  }
+  html.touch #loading {
+    margin-top: 8px;
+  }
+  html.touch .credit {
+    margin-top: 10px;
+    font-size: 9px;
+  }
+
+  /* Options: lay the four groups across two columns so they use the landscape
+     width instead of stacking past the bottom edge. h1 and BACK span the row. */
+  html.touch #screen-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 32px;
+    align-content: center;
+    justify-items: stretch;
+    max-width: 94vw;
+    text-align: left;
+  }
+  html.touch #screen-options h1,
+  html.touch #screen-options #btn-options-back {
+    grid-column: 1 / -1;
+  }
+  html.touch #screen-options h1 {
+    text-align: center;
+  }
+  html.touch #screen-options .opt-group {
+    margin: 0 0 8px;
+    max-width: none;
+  }
+  html.touch #screen-options .opt-group-label {
+    margin-bottom: 6px;
+  }
+  html.touch #screen-options #btn-options-back {
+    justify-self: center;
+    margin-top: 4px;
+  }
+}
+
+/* ------------------------- Powerup legend modal ------------------------- */
+/* Full-screen overlay the compact title opens via its POWERUPS button, so the
+   folded-away legend stays one tap from the player. Sits above the overlay menus
+   (z 20) and below the portrait rotate hint (z 100). */
+.popup {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(4, 7, 12, 0.82);
+  backdrop-filter: blur(3px);
+  animation: popupFade 0.16s ease-out;
+}
+.popup.hidden {
+  display: none !important;
+}
+.popup-panel {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90dvh;
+  overflow-y: auto;
+  padding: 20px 26px 24px;
+  border: 1px solid var(--cyan-dim);
+  border-radius: 10px;
+  background: rgba(6, 10, 18, 0.97);
+  box-shadow: 0 0 44px rgba(53, 232, 255, 0.14);
+}
+.popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.popup-title {
+  font-size: 13px;
+  letter-spacing: 0.32em;
+  opacity: 0.7;
+  color: var(--cyan);
+}
+#btn-powerups-close {
+  pointer-events: auto;
+  padding: 6px 12px;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 0;
+  color: #dff6ff;
+  background: transparent;
+  border: 1px solid rgba(223, 246, 255, 0.28);
+  border-radius: 6px;
+  box-shadow: none;
+}
+#btn-powerups-close:hover {
+  transform: none;
+  border-color: rgba(223, 246, 255, 0.6);
+  box-shadow: none;
+}
+.popup .powerup-guide {
+  margin-bottom: 0;
+}
+@keyframes popupFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Reveal the POWERUPS trigger only where the inline legend is folded away. */
+@media (orientation: landscape) and (max-height: 520px) {
+  html.touch .btn-open-powerups {
+    display: inline-flex;
+  }
 }

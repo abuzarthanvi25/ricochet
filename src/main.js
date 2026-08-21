@@ -17,6 +17,7 @@ import {
   isLocked,
 } from './core/input.js'
 import { Game, STATE } from './core/game.js'
+import { TouchControls, detectTouch } from './core/touch.js'
 import { Hud } from './ui/hud.js'
 import { Overlays } from './ui/overlays.js'
 import { initAudio, resumeAudio, isMuted, setMuted } from './fx/audio.js'
@@ -36,6 +37,12 @@ import {
 // Styles are applied by the time this module runs, so drop the anti-FOUC guard
 // (see index.html) and reveal the fully-styled page.
 document.documentElement.classList.remove('preload')
+
+// Touch devices get an on-screen control layer and a pointer-lock-free menu
+// flow. The `touch` class drives every mobile-only CSS rule, and is set before
+// the overlays are built so their labels can read it.
+const MOBILE = detectTouch()
+if (MOBILE) document.documentElement.classList.add('touch')
 
 const canvas = document.getElementById('scene')
 
@@ -115,6 +122,10 @@ const overlays = new Overlays()
 initInput(canvas)
 initAudio()
 
+// On-screen controls, built only on touch devices. Everything it drives flows
+// through core/input.js, so the game loop stays identical to the desktop path.
+const touch = MOBILE ? new TouchControls() : null
+
 let game = null
 let pendingStart = false
 let perf = null
@@ -181,6 +192,10 @@ overlays.bind({
   onPlay: () => beginMatch(true),
   onRetry: () => beginMatch(true),
   onResume: () => {
+    if (MOBILE) {
+      resumeMobile()
+      return
+    }
     pendingStart = false
     requestLock()
   },
@@ -190,9 +205,65 @@ function beginMatch(fresh) {
   if (!game) return
   resumeAudio()
   if (fresh) game.reset()
+  // Mobile has no pointer lock -- start the match directly and let the on-screen
+  // controls drive it. Fullscreen + a landscape lock are best-effort from this
+  // user gesture; both silently no-op where the browser refuses them.
+  if (MOBILE) {
+    goFullscreen()
+    game.start()
+    showPlayUI()
+    return
+  }
   pendingStart = true
   requestLock()
 }
+
+// --- Mobile match flow (pointer lock replaced by explicit show/hide) ---------
+
+function showPlayUI() {
+  overlays.hide()
+  hud.show()
+  touch?.show()
+}
+
+function resumeMobile() {
+  if (!game) return
+  resumeAudio()
+  game.resume()
+  showPlayUI()
+}
+
+// Reached from the on-screen pause button and from tab-backgrounding.
+function pauseMobile() {
+  if (!game || game.state !== STATE.PLAYING) return
+  game.pause()
+  hud.hide()
+  touch?.hide()
+  overlays.showPaused()
+}
+
+function goFullscreen() {
+  const el = document.documentElement
+  try {
+    if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => {})
+  } catch {
+    /* older browsers throw synchronously; landscape play still works windowed */
+  }
+  try {
+    screen.orientation?.lock?.('landscape').catch(() => {})
+  } catch {
+    /* orientation lock is unsupported on iOS Safari; the rotate hint covers it */
+  }
+}
+
+if (touch) touch.onPause = pauseMobile
+
+// A backgrounded mobile tab (call, app switch) should pause rather than keep the
+// match running blind. rAF is already suspended when hidden, so this only makes
+// the pause explicit and surfaces the menu on return.
+document.addEventListener('visibilitychange', () => {
+  if (MOBILE && document.hidden) pauseMobile()
+})
 
 onLockChange((locked) => {
   if (!game) return
@@ -276,6 +347,7 @@ async function boot() {
   game.onMatchEnd = (result, score) => {
     releaseLock()
     hud.hide()
+    touch?.hide()
     if (result === 'win') overlays.showWin(score.you, score.them)
     else overlays.showGameOver('The bots hit fifteen first.', score.you, score.them)
   }
@@ -312,6 +384,7 @@ async function boot() {
     STATE,
     hud,
     overlays,
+    touch,
     powerups: game.powerups,
     // Bound to THIS module's audio instance. A console `import()` of audio.js
     // resolves to a separate Vite module copy with its own `muted` flag, so
@@ -420,7 +493,10 @@ function frame(now) {
   renderer.info.reset()
 
   if (game) {
-    if (isLocked()) {
+    // Look input: the pointer-lock mouse on desktop, or accumulated touch-drag
+    // deltas on mobile (only while actually playing, so a drag on a menu behind
+    // the overlay cannot spin the camera). Both drain the same delta buffer.
+    if (isLocked() || (MOBILE && game.state === STATE.PLAYING)) {
       consumeMouse(mouse)
       game.rig.applyMouse(mouse.x, mouse.y)
     }
