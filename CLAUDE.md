@@ -62,6 +62,7 @@ core/
   powerups.js  registry + the pickups floating in the arena
   mines.js     finite floating sea-mines (destructible hazards)
   settings.js  persisted options: flight/aim assist, sensitivity, shot speed
+  touch.js     on-screen controls for touch devices + computeJoystick()
 entities/      Bot (shared base) -> Player, Enemy
 weapons/projectiles.js   stepping, bouncing, arming — the core mechanic
 fx/            explosions, shared light pool, synthesised audio
@@ -164,6 +165,32 @@ Relight a resized box by pushing `fogNear/fogFar`, the static ambient/key
 _intensity_, wall `emissiveIntensity` and the point pool's `distance` — all
 uniforms. Never raise `CFG.pools.lights` or add a light to brighten the room:
 that changes the visible light count and recompiles every material (see above).
+
+**Touch controls feed the SAME input state as the mouse and keyboard.**
+`core/touch.js` writes only through `core/input.js` setters
+(`setTouchMove/Vert/Firing`, `pressTouchBoost`, `addLook`) — never a second
+input surface. That is why the render loop, `Player.think`, the fire path and the
+analytic sweep never learn they are being driven by a thumb: `isFiring()` ORs the
+touch flag, boost reuses the same edge trigger, and a look drag folds into the
+same `dx/dy` buffer the mouse drains. A touch-fired ricochet therefore arms and
+bounces bit-for-bit like a mouse-fired one. The look layer is DOM/pointer-events
+only (like the radar) — zero three.js, zero shader-program surface.
+
+**`Player.think` clamps the wish with `lengthSq() > 1`, not `> 1e-6`.** The
+joystick is analog, so a half push must stay a half-magnitude wish. Every keyboard
+combination is already magnitude ≥ 1 (a single key is exactly 1), so this is
+bit-identical to the old normalize for the keyboard and only preserves a partial
+stick tilt. Do not revert it to normalizing every non-zero wish, or the analog
+stick collapses back to 8-way on/off.
+
+**The mobile menu flow bypasses pointer lock entirely.** On a touch device
+(`MOBILE` in `main.js`, from `detectTouch()`) there is no `requestLock()`:
+`beginMatch` starts the game directly and `showPlayUI()`/`pauseMobile()` toggle
+the HUD, touch layer and overlay by hand. The desktop path (lock → `onLockChange`
+→ start/pause) is untouched and still the only one that runs off pointer lock.
+Backgrounding the tab pauses via `visibilitychange`. Do not route the touch flow
+through pointer lock — mobile browsers do not grant it, and the match would never
+start.
 
 **Flight assist is a player-only drag swap.** `Bot.integrate` uses
 `CFG.player.assistDrag` in place of `this.drag` when `this._assistBraking` is set,

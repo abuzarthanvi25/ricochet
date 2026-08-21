@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { Bot } from './Bot.js'
 import { CFG } from '../config.js'
-import { isDown, isFiring, consumeBoost } from '../core/input.js'
+import { isDown, isFiring, consumeBoost, getTouchMove } from '../core/input.js'
 import { orientToDirection, aimAssist } from '../core/util.js'
 
 const _origin = new THREE.Vector3()
@@ -53,7 +53,20 @@ export class Player extends Bot {
     if (isDown('KeyA')) w.sub(rig.right)
     if (isDown('Space')) w.y += 1
     if (isDown('ShiftLeft') || isDown('ShiftRight')) w.y -= 1
-    if (w.lengthSq() > 1e-6) w.normalize()
+
+    // Touch joystick feeds the same camera-relative plane, its buttons the world
+    // vertical -- added on top of the keyboard so a hybrid device can use either.
+    // The joystick is analog, so its push is scaled, not a full unit like a key.
+    const tm = getTouchMove()
+    if (tm.y) w.addScaledVector(rig.forward, tm.y)
+    if (tm.x) w.addScaledVector(rig.right, tm.x)
+    if (tm.vert) w.y += tm.vert
+
+    // Clamp to a unit push so diagonals aren't faster, but PRESERVE a partial
+    // analog tilt below full. Every keyboard combination is already magnitude >= 1
+    // (a single key is exactly 1), so this is bit-identical to the old normalize
+    // for the keyboard and only matters for a half-pushed stick.
+    if (w.lengthSq() > 1) w.normalize()
 
     // Permaboost zeroes the cooldown rather than removing the edge trigger --
     // holding Q must still not chain-dash. See the note in core/input.js.

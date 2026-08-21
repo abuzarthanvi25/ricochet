@@ -222,6 +222,19 @@ export const CFG = {
     blip: 4.5, // blip radius, px
   },
 
+  // On-screen controls for touch devices (core/touch.js). The left half of the
+  // screen is a dynamic analog joystick, the right half a look-drag zone, plus a
+  // floating fire/boost/ascend/descend cluster. joyRadius is the pixel throw for
+  // a full-magnitude push; deadzone is the fraction of it ignored at the centre
+  // so a resting thumb does not creep. lookSpeed scales a drag delta before it
+  // feeds the same pipeline as the mouse, so the sensitivity slider still applies.
+  touch: {
+    joyRadius: 62,
+    deadzone: 0.16,
+    lookZoneStart: 0.45, // fraction of screen width; left of it drives the stick
+    lookSpeed: 1.35,
+  },
+
   pools: {
     projectiles: 96,
     explosions: 24,
