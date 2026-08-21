@@ -9,7 +9,30 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Mobile / touch support.** Touch devices now get a full on-screen control
+  scheme, auto-detected (force with `?touch`, disable with `?desktop`):
+  - A **dynamic analog joystick** on the left half — the base spawns wherever
+    your thumb lands — drives thrust and strafe. Because it is analog, a light
+    push moves you slowly; a keyboard is always full-tilt.
+  - The right half is a **look-drag** zone for aiming.
+  - A floating **FIRE / BOOST / ascend / descend** cluster sits bottom-right;
+    holding **FIRE** and dragging lets one thumb aim and shoot at once.
+  - A **pause** button top-left, and the readouts that shared those corners
+    (integrity, radar, killfeed) reflow to the top so nothing sits under a thumb.
+  - The menu flow drops pointer lock on touch: **TAP TO ENGAGE** starts the
+    match directly, backgrounding the tab pauses it, and a **rotate-to-landscape**
+    prompt covers the screen in portrait. Fullscreen and a landscape orientation
+    lock are requested best-effort on play.
+  - The title and options screens get a compact short-landscape layout so they
+    fit a phone's height with **no scrolling** — the powerup legend folds away on
+    the title, the options groups flow into two columns, and the attribution
+    stays put.
+
+  Everything routes through the same input layer the mouse and keyboard use, so
+  the flight model, the aim assist, and the analytic collision are untouched — a
+  thumb-fired ricochet bounces and arms exactly like a mouse-fired one.
 
 ## [0.3.0] — 2026-07-24
 

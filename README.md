@@ -67,6 +67,27 @@ through pointer lock. Holding boost while thrusting forward would close the tab.
 It used to double up on the right mouse button, but that dashed newcomers into a
 wall on the natural "aim" reflex, so RMB is now unbound.
 
+### On a phone or tablet
+
+Touch devices are detected automatically and get an on-screen scheme instead
+(append `?touch` to force it, `?desktop` to force it off):
+
+| Touch input       | Action                                                     |
+| ----------------- | ---------------------------------------------------------- |
+| Left half — drag  | Analog joystick: thrust + strafe (spawns under your thumb) |
+| Right half — drag | Aim                                                        |
+| **FIRE** (hold)   | Fire — drag off it to aim while firing                     |
+| **BOOST**         | Boost dash                                                 |
+| **▲ / ▼**         | Ascend / descend (world up/down)                           |
+| **❚❚** (top-left) | Pause                                                      |
+
+The joystick is analog, so a half push moves you at half speed — a nuance the
+keyboard, always full-tilt, can't give you. There is no pointer lock on touch:
+**TAP TO ENGAGE** starts the match directly, backgrounding the tab pauses it, and
+a rotate-to-landscape prompt appears in portrait. Everything feeds the same input
+layer the mouse and keyboard use, so a thumb-fired ricochet bounces and arms just
+like any other shot.
+
 ### Newcomer aids
 
 The controls are 6-DOF and unforgiving by default, so a handful of assists make

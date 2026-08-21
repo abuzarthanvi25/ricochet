@@ -1078,5 +1078,37 @@ console.log('\n== projectile-vs-projectile ricochet ==')
   ok('parallel shots far apart do not ricochet', c.bounces === 0 && d.bounces === 0)
 }
 
+// ------------------------------------------------------------- touch joystick
+console.log('\n== touch joystick ==')
+{
+  const { computeJoystick } = await import('../src/core/touch.js')
+  const R = CFG.touch.joyRadius
+  const DZ = CFG.touch.deadzone
+
+  let v = computeJoystick(0, 0, R, DZ)
+  ok('centre is dead', v.x === 0 && v.y === 0)
+
+  v = computeJoystick(DZ * R * 0.5, 0, R, DZ)
+  ok('inside deadzone is dead', v.x === 0 && v.y === 0, `${v.x}`)
+
+  // Screen-up (negative dy) is forward; screen-right (positive dx) is strafe.
+  v = computeJoystick(0, -R, R, DZ)
+  ok('full up is forward = +y', near(v.y, 1) && near(v.x, 0), `${v.x},${v.y}`)
+  v = computeJoystick(0, R, R, DZ)
+  ok('full down is backward = -y', near(v.y, -1) && near(v.x, 0), `${v.y}`)
+  v = computeJoystick(R, 0, R, DZ)
+  ok('full right is strafe = +x', near(v.x, 1) && near(v.y, 0), `${v.x}`)
+
+  // Past the rim the magnitude clamps to 1, direction preserved.
+  v = computeJoystick(R * 3, 0, R, DZ)
+  ok('beyond radius clamps to unit', near(v.x, 1), `${v.x}`)
+
+  // A half push (just past the deadzone toward the rim) is a partial magnitude,
+  // which is the whole reason the analog stick beats 8-way keys.
+  const mid = DZ * R + (R - DZ * R) * 0.5
+  v = computeJoystick(mid, 0, R, DZ)
+  ok('half push is a partial magnitude', v.x > 0.3 && v.x < 0.7, `${v.x}`)
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail ? 1 : 0)

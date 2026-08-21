@@ -25,6 +25,21 @@ const CONTROL_COLUMNS = [
   ],
 ]
 
+// Touch devices get the on-screen scheme instead: a dynamic left stick, a
+// right-side look drag and the floating button cluster (see core/touch.js).
+const TOUCH_CONTROL_COLUMNS = [
+  [
+    { keys: ['Left stick'], label: 'Thrust' },
+    { keys: ['▲', '▼'], label: 'Ascend / Descend' },
+    { keys: ['Drag'], label: 'Aim (hold FIRE to aim + shoot)' },
+  ],
+  [
+    { keys: ['FIRE'], label: 'Fire' },
+    { keys: ['BOOST'], label: 'Boost dash' },
+    { keys: ['❚❚'], label: 'Pause' },
+  ],
+]
+
 export class Overlays {
   constructor() {
     this.root = $('overlay')
@@ -43,6 +58,15 @@ export class Overlays {
     this.loading = $('loading')
 
     this.btnPlay.disabled = true
+
+    // Set by main.js before this runs. Drives the touch control legend and the
+    // wording of the play/pause copy, which otherwise names a mouse.
+    this.touch = document.documentElement.classList.contains('touch')
+    if (this.touch) {
+      this.btnPlay.textContent = 'TAP TO ENGAGE'
+      const pausedTag = this.screens.paused.querySelector('.tagline')
+      if (pausedTag) pausedTag.textContent = 'Match paused.'
+    }
 
     this.diffGroups = [...document.querySelectorAll('[data-difficulty-group]')]
     this.controlGroups = [...document.querySelectorAll('[data-controls-group]')]
@@ -78,6 +102,34 @@ export class Overlays {
       e.currentTarget.blur()
       this._show(this._optionsReturn)
     })
+
+    // Powerup legend modal. Surfaced by the POWERUPS button on the compact
+    // short-landscape title, where the inline legend is folded away. It floats
+    // above whatever screen is showing rather than switching screens, so it can
+    // be dismissed straight back to the title.
+    this.powerupPopup = $('powerup-popup')
+    for (const btn of document.querySelectorAll('.btn-open-powerups')) {
+      btn.addEventListener('click', (e) => {
+        e.currentTarget.blur()
+        this.openPowerups()
+      })
+    }
+    $('btn-powerups-close').addEventListener('click', (e) => {
+      e.currentTarget.blur()
+      this.closePowerups()
+    })
+    // A tap on the backdrop (not the panel) closes it -- the natural gesture.
+    this.powerupPopup.addEventListener('click', (e) => {
+      if (e.target === this.powerupPopup) this.closePowerups()
+    })
+  }
+
+  openPowerups() {
+    this.powerupPopup.classList.remove('hidden')
+  }
+
+  closePowerups() {
+    this.powerupPopup.classList.add('hidden')
   }
 
   openOptions(returnTo) {
@@ -244,10 +296,11 @@ export class Overlays {
     }
   }
 
-  /** Same key legend on the title screen and the pause menu. */
+  /** Same control legend on the title screen and the pause menu. */
   _buildControls() {
+    const columns = this.touch ? TOUCH_CONTROL_COLUMNS : CONTROL_COLUMNS
     for (const group of this.controlGroups) {
-      for (const column of CONTROL_COLUMNS) {
+      for (const column of columns) {
         const col = document.createElement('div')
         col.className = 'ctrl-col'
 
