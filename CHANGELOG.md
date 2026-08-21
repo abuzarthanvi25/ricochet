@@ -9,6 +9,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.4.0] — 2026-08-21
+
+Mobile support — RICOCHET is now playable on a phone or tablet, with a full
+on-screen control scheme and a menu flow that no longer depends on pointer lock.
+
 ### Added
 
 - **Mobile / touch support.** Touch devices now get a full on-screen control
@@ -386,7 +393,8 @@ Three asset quirks handled at load, documented in `core/assets.js`:
 
 Model: **Shooter Bot** by Aurantiko, CC-BY-4.0, via Sketchfab.
 
-[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/v0.3.0...develop
+[Unreleased]: https://github.com/abuzarthanvi25/ricochet/compare/v0.4.0...develop
+[0.4.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.4.0
 [0.3.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.3.0
 [0.2.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.2.0
 [0.1.0]: https://github.com/abuzarthanvi25/ricochet/releases/tag/v0.1.0
